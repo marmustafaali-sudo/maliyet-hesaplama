@@ -1271,7 +1271,9 @@
       Array.prototype.forEach.call(box.querySelectorAll(".ap-backup-btn"), function(btn){
         btn.addEventListener("click", function(e){
           e.stopPropagation();
-          window.open("/api/etut/backup?date=" + encodeURIComponent(btn.dataset.date), "_blank");
+          downloadDateBackupAsExcel(btn.dataset.date).catch(function(err){
+            alert("Yedek Excel'e çevrilirken hata: " + (err&&err.message?err.message:err));
+          });
         });
       });
       // wire entry open
@@ -1303,6 +1305,60 @@
     }catch(e){
       box.innerHTML = '<p style="color:#f87171;">Arşiv yüklenemedi: '+escAttr(e.message)+'</p>';
     }
+  }
+
+  function snapshotToEur(price, currency, usd, eur){
+    var p = Number(price) || 0;
+    if(currency === "EUR") return p;
+    if(currency === "USD") return (p*usd)/eur;
+    return p/eur;
+  }
+
+  function computeSnapshotTotals(snap){
+    var usd = snap.usdTry || 0, eur = snap.eurTry || 0;
+    var materialTotal = (snap.items||[]).reduce(function(s,it){
+      var catalogUnit = it.catalogUnit || it.unit;
+      var qtyInCatalogUnit = convertQty(it.qty, it.unit, catalogUnit);
+      return s + snapshotToEur(it.price, it.currency, usd, eur) * qtyInCatalogUnit;
+    }, 0);
+    var laborTotal = (snap.laborItems||[]).reduce(function(s,it){
+      return s + snapshotToEur(it.hourlyRate, it.currency, usd, eur) * (Number(it.hours)||0);
+    }, 0);
+    return { materialTotal: materialTotal, laborTotal: laborTotal, grandTotal: materialTotal+laborTotal };
+  }
+
+  async function downloadDateBackupAsExcel(date){
+    await window.__libsReady;
+    if(typeof XLSX === "undefined"){
+      alert("Excel kütüphanesi yüklenemedi (internet/güvenlik duvarı sorunu olabilir).");
+      return;
+    }
+    var resp = await fetch("/api/etut/backup?date=" + encodeURIComponent(date));
+    var data = await resp.json();
+    if(!data.ok && !data.records) throw new Error(data.error || "Yedek alınamadı");
+
+    var wsData = [["Etüt Adı","Etüt Kodu","Saat","Malzeme Toplamı (EUR)","İşçilik Toplamı (EUR)","Genel Toplam (EUR)","Parça Ağırlığı (kg)","€/kg","Notlar"]];
+    data.records.forEach(function(rec){
+      var snap = rec.data;
+      var totals = computeSnapshotTotals(snap);
+      var weight = parseFloat(snap.partWeight) || 0;
+      var perKg = weight > 0 ? totals.grandTotal/weight : "";
+      var time = "";
+      var keyParts = rec.key.split(":");
+      if(keyParts[2]) time = new Date(parseInt(keyParts[2],10)).toLocaleTimeString("tr-TR",{hour:"2-digit",minute:"2-digit"});
+      wsData.push([
+        snap.etutAdi || "", snap.etutKodu || "", time,
+        Math.round(totals.materialTotal*100)/100, Math.round(totals.laborTotal*100)/100, Math.round(totals.grandTotal*100)/100,
+        weight || "", perKg ? Math.round(perKg*100)/100 : "",
+        snap.notlar || ""
+      ]);
+    });
+
+    var ws = XLSX.utils.aoa_to_sheet(wsData);
+    ws["!cols"] = [{wch:22},{wch:18},{wch:8},{wch:16},{wch:16},{wch:14},{wch:14},{wch:10},{wch:30}];
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, date);
+    XLSX.writeFile(wb, "yedek-" + date + ".xlsx");
   }
 
   // ---------- Panel toggles ----------

@@ -28,6 +28,11 @@
       "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js",
       "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js",
       "https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"
+    ]),
+    loadScriptFallback([
+      "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js",
+      "https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js",
+      "https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"
     ])
   ]);
 </script>
@@ -146,6 +151,8 @@
   .ap-folder-head .ap-count{ color:#94a3b8; font-weight:400; }
   .ap-backup-btn{ background:none; border:none; color:#94a3b8; cursor:pointer; font-size:12px; padding:2px 6px; }
   .ap-backup-btn:hover{ color:#fff; }
+  .ap-backup-html-btn{ background:none; border:none; color:#94a3b8; cursor:pointer; font-size:12px; padding:2px 6px; }
+  .ap-backup-html-btn:hover{ color:#fff; }
   .ap-folder-body{ display:none; padding:6px 10px; }
   .ap-folder-body.open{ display:block; }
   .ap-entry{
@@ -1254,7 +1261,10 @@
         return '<div class="ap-folder">'+
           '<div class="ap-folder-head" data-date="'+d+'">'+
             '<span>📅 '+dateLabel(d)+' <span class="ap-count">('+entries.length+')</span></span>'+
-            '<button class="ap-backup-btn" data-date="'+d+'" title="Bu günün yedeğini indir">⬇ Yedek al</button>'+
+            '<span>'+
+              '<button class="ap-backup-btn" data-date="'+d+'" title="Bu günün Excel özetini indir">⬇ Excel</button>'+
+              '<button class="ap-backup-html-btn" data-date="'+d+'" title="Bu günün HTML dosyalarını zip olarak indir">⬇ HTML</button>'+
+            '</span>'+
           '</div>'+
           '<div class="ap-folder-body" id="ap-body-'+d+'">'+entriesHtml+'</div>'+
         '</div>';
@@ -1263,15 +1273,26 @@
       // wire folder open/close
       Array.prototype.forEach.call(box.querySelectorAll(".ap-folder-head"), function(head){
         head.addEventListener("click", function(e){
-          if(e.target.classList.contains("ap-backup-btn")) return;
+          if(e.target.classList.contains("ap-backup-btn") || e.target.classList.contains("ap-backup-html-btn")) return;
           document.getElementById("ap-body-"+head.dataset.date).classList.toggle("open");
         });
       });
-      // wire backup buttons
+      // wire backup buttons (excel)
       Array.prototype.forEach.call(box.querySelectorAll(".ap-backup-btn"), function(btn){
         btn.addEventListener("click", function(e){
           e.stopPropagation();
-          window.open("/api/etut/backup?date=" + encodeURIComponent(btn.dataset.date), "_blank");
+          downloadDateBackupAsExcel(btn.dataset.date).catch(function(err){
+            alert("Yedek Excel'e çevrilirken hata: " + (err&&err.message?err.message:err));
+          });
+        });
+      });
+      // wire backup buttons (html zip)
+      Array.prototype.forEach.call(box.querySelectorAll(".ap-backup-html-btn"), function(btn){
+        btn.addEventListener("click", function(e){
+          e.stopPropagation();
+          downloadDateBackupAsHtmlZip(btn.dataset.date).catch(function(err){
+            alert("Yedek HTML'e çevrilirken hata: " + (err&&err.message?err.message:err));
+          });
         });
       });
       // wire entry open
@@ -1303,6 +1324,60 @@
     }catch(e){
       box.innerHTML = '<p style="color:#f87171;">Arşiv yüklenemedi: '+escAttr(e.message)+'</p>';
     }
+  }
+
+  function snapshotToEur(price, currency, usd, eur){
+    var p = Number(price) || 0;
+    if(currency === "EUR") return p;
+    if(currency === "USD") return (p*usd)/eur;
+    return p/eur;
+  }
+
+  function computeSnapshotTotals(snap){
+    var usd = snap.usdTry || 0, eur = snap.eurTry || 0;
+    var materialTotal = (snap.items||[]).reduce(function(s,it){
+      var catalogUnit = it.catalogUnit || it.unit;
+      var qtyInCatalogUnit = convertQty(it.qty, it.unit, catalogUnit);
+      return s + snapshotToEur(it.price, it.currency, usd, eur) * qtyInCatalogUnit;
+    }, 0);
+    var laborTotal = (snap.laborItems||[]).reduce(function(s,it){
+      return s + snapshotToEur(it.hourlyRate, it.currency, usd, eur) * (Number(it.hours)||0);
+    }, 0);
+    return { materialTotal: materialTotal, laborTotal: laborTotal, grandTotal: materialTotal+laborTotal };
+  }
+
+  async function downloadDateBackupAsExcel(date){
+    await window.__libsReady;
+    if(typeof XLSX === "undefined"){
+      alert("Excel kütüphanesi yüklenemedi (internet/güvenlik duvarı sorunu olabilir).");
+      return;
+    }
+    var resp = await fetch("/api/etut/backup?date=" + encodeURIComponent(date));
+    var data = await resp.json();
+    if(!data.ok && !data.records) throw new Error(data.error || "Yedek alınamadı");
+
+    var wsData = [["Etüt Adı","Etüt Kodu","Saat","Malzeme Toplamı (EUR)","İşçilik Toplamı (EUR)","Genel Toplam (EUR)","Parça Ağırlığı (kg)","€/kg","Notlar"]];
+    data.records.forEach(function(rec){
+      var snap = rec.data;
+      var totals = computeSnapshotTotals(snap);
+      var weight = parseFloat(snap.partWeight) || 0;
+      var perKg = weight > 0 ? totals.grandTotal/weight : "";
+      var time = "";
+      var keyParts = rec.key.split(":");
+      if(keyParts[2]) time = new Date(parseInt(keyParts[2],10)).toLocaleTimeString("tr-TR",{hour:"2-digit",minute:"2-digit"});
+      wsData.push([
+        snap.etutAdi || "", snap.etutKodu || "", time,
+        Math.round(totals.materialTotal*100)/100, Math.round(totals.laborTotal*100)/100, Math.round(totals.grandTotal*100)/100,
+        weight || "", perKg ? Math.round(perKg*100)/100 : "",
+        snap.notlar || ""
+      ]);
+    });
+
+    var ws = XLSX.utils.aoa_to_sheet(wsData);
+    ws["!cols"] = [{wch:22},{wch:18},{wch:8},{wch:16},{wch:16},{wch:14},{wch:14},{wch:10},{wch:30}];
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, date);
+    XLSX.writeFile(wb, "yedek-" + date + ".xlsx");
   }
 
   // ---------- Panel toggles ----------
@@ -1429,6 +1504,7 @@
       window.__libsReady.then(function(){
         var missing = [];
         if(typeof XLSX === "undefined") missing.push("Excel kütüphanesi (xlsx)");
+        if(typeof JSZip === "undefined") missing.push("Zip kütüphanesi (jszip)");
         if(missing.length){
           var warn = document.getElementById("libWarning");
           warn.style.display = "block";
