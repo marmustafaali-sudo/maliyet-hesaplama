@@ -122,6 +122,41 @@
   }
   #exportPoolsBtn{left:16px; bottom:16px; background:#0f766e;}
   #exportPoolsBtn:hover{background:#0d5f59;}
+  #quickSaveBtn{right:16px; top:16px; background:#b45309;}
+  #quickSaveBtn:hover{background:#92400e;}
+  #archiveToggleBtn{left:16px; bottom:64px; background:#4338ca;}
+  #archiveToggleBtn:hover{background:#3730a3;}
+  #cloudSaveBtn{right:16px; top:64px; background:#0369a1;}
+  #cloudSaveBtn:hover{background:#075985;}
+
+  .archive-panel{
+    position:fixed; left:0; top:0; height:100vh; width:300px; z-index:100;
+    background:#0f172a; color:#fff; box-shadow:2px 0 12px rgba(0,0,0,0.3);
+    transform:translateX(-100%); transition:transform .2s ease; overflow-y:auto;
+    padding:20px 16px;
+  }
+  .archive-panel.open{ transform:translateX(0); }
+  .archive-panel h3{ font-size:14px; margin:0 0 12px; }
+  .archive-panel .ap-close{ float:right; background:none; border:none; color:#94a3b8; cursor:pointer; font-size:16px; }
+  .ap-folder{ margin-bottom:10px; border:1px solid #1e293b; border-radius:8px; overflow:hidden; }
+  .ap-folder-head{
+    display:flex; align-items:center; justify-content:space-between; padding:8px 10px;
+    background:#1e293b; cursor:pointer; font-size:12px;
+  }
+  .ap-folder-head .ap-count{ color:#94a3b8; font-weight:400; }
+  .ap-backup-btn{ background:none; border:none; color:#94a3b8; cursor:pointer; font-size:12px; padding:2px 6px; }
+  .ap-backup-btn:hover{ color:#fff; }
+  .ap-folder-body{ display:none; padding:6px 10px; }
+  .ap-folder-body.open{ display:block; }
+  .ap-entry{
+    display:flex; align-items:center; justify-content:space-between; gap:6px;
+    font-size:12px; padding:6px 4px; border-top:1px solid #1e293b; cursor:pointer;
+  }
+  .ap-entry:first-child{ border-top:none; }
+  .ap-entry:hover{ color:#93c5fd; }
+  .ap-entry .ap-del{ background:none;border:none;color:#64748b;cursor:pointer;font-size:12px; }
+  .ap-entry .ap-del:hover{ color:#f87171; }
+  @media print{ .archive-panel, #archiveToggleBtn, #cloudSaveBtn{ display:none !important; } }
   @media print{
     .fixed-btn{display:none !important;}
   }
@@ -178,6 +213,15 @@
   <tv-market-overview symbol-sectors='[{"sectionName":"KUR","symbols":["FOREXCOM:USDTRY","OANDA:EURTRY","OANDA:EURUSD"]}]' item-size="compact" chart-size="compact" style="width: 300px; height: 300px"></tv-market-overview>
 </div>
 <button class="fixed-btn" id="exportPoolsBtn">⬇ Havuzları dışa aktar (Excel)</button>
+<button class="fixed-btn" id="quickSaveBtn">💾 HTML olarak indir</button>
+<button class="fixed-btn" id="archiveToggleBtn">📁 Etüt Arşivi</button>
+<button class="fixed-btn" id="cloudSaveBtn">☁️ Buluta Kaydet</button>
+
+<div class="archive-panel" id="archivePanel">
+  <button class="ap-close" id="archiveCloseBtn">✕</button>
+  <h3>📁 Etüt Arşivi</h3>
+  <div id="archiveList" style="font-size:12px;color:#94a3b8;">Yükleniyor…</div>
+</div>
 <div class="container">
 
   <h1>Maliyet hesaplama tablosu</h1>
@@ -190,6 +234,10 @@
     <input id="etutKodu" type="text" placeholder="Örn. ET-2026-0071">
   </label>
   <button class="add-btn" id="resetPageBtn" style="margin-top:12px;color:#b91c1c;border-color:#fca5a5;">↺ Sayfayı sıfırla (yeni etüt)</button>
+
+  <label class="etut-field" style="max-width:none;margin-top:16px;">Notlar
+    <textarea id="notlar" rows="3" placeholder="Bu etütle ilgili aklında kalması gereken notlar…" style="border:1px solid var(--slate-300);border-radius:6px;padding:8px;font-size:13px;font-family:inherit;resize:vertical;"></textarea>
+  </label>
 
   <div style="height:20px;"></div>
 
@@ -238,6 +286,53 @@
   </div>
 
   <!-- Exchange rates -->
+  <!-- Weight calculator -->
+  <div class="panel">
+    <button class="panel-toggle" id="weightCalcToggle">
+      <span>Ağırlık hesaplama aracı</span>
+      <span class="right"><span id="weightCalcChevron">▾</span></span>
+    </button>
+    <div class="panel-body" id="weightCalcBody">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:12px;">
+        <label>Şekil
+          <select id="wcShape" class="sel">
+            <option value="dikdortgen">Dikdörtgen (prizma)</option>
+            <option value="yuvarlak">Yuvarlak (silindir)</option>
+            <option value="icibos">İçi boş yuvarlak (boru)</option>
+            <option value="manto">Manto (silindir açınımı - levha)</option>
+          </select>
+        </label>
+        <label>Malzeme
+          <select id="wcMaterial" class="sel">
+            <option value="7.85">Çelik (7.85)</option>
+            <option value="8.96">Bakır (8.96)</option>
+            <option value="2.70">Alüminyum (2.70)</option>
+            <option value="manual">Manuel gir…</option>
+          </select>
+        </label>
+        <label id="wcManualDensityWrap" style="display:none;">Yoğunluk (kg/dm³)
+          <input type="number" id="wcManualDensity" class="num-input" step="0.01" value="7.85">
+        </label>
+      </div>
+
+      <div id="wcDims" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin-bottom:12px;">
+        <!-- filled dynamically based on shape -->
+      </div>
+
+      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+        <div>
+          <p style="font-size:11px;color:var(--slate-500);margin:0;">Hesaplanan ağırlık</p>
+          <p style="font-size:20px;font-weight:600;margin:2px 0 0;" id="wcResult">— kg</p>
+        </div>
+        <div id="wcMantoInfo" style="display:none;">
+          <p style="font-size:11px;color:var(--slate-500);margin:0;">Açınım (levha) ölçüleri</p>
+          <p style="font-size:14px;font-weight:600;margin:2px 0 0;" id="wcMantoDims">—</p>
+        </div>
+        <button class="add-btn" id="wcApplyBtn" style="margin-bottom:0;">→ Parça ağırlığına aktar</button>
+      </div>
+    </div>
+  </div>
+
   <div class="rates-panel">
     <div class="rates-head">
       <span>Döviz kurları (satış)</span>
@@ -701,6 +796,7 @@
     }
     var etutAdi = document.getElementById("etutAdi").value.trim();
     var weightNum = parseFloat(document.getElementById("partWeight").value) || 0;
+    var notlar = document.getElementById("notlar").value.trim();
 
     var wsData = [];
     wsData.push([etutAdi ? ("Maliyet Hesaplama Tablosu - " + etutAdi) : "Maliyet Hesaplama Tablosu"]);
@@ -710,6 +806,10 @@
     wsData.push(["USD/TRY satış kuru", null]);
     wsData.push(["EUR/TRY satış kuru", null]);
     wsData.push([]);
+    if(notlar){
+      wsData.push(["Notlar", notlar]);
+      wsData.push([]);
+    }
 
     wsData.push(["MALZEME MALİYETİ"]);
     wsData.push(["Ürün","Miktar","Giriş birimi","Katalog birimi","Birim fiyat (katalog birimine göre)","Para birimi","Birim fiyat (EUR)","Toplam (EUR)"]);
@@ -912,6 +1012,73 @@
     reader.readAsArrayBuffer(file);
   }
 
+  // ---------- Weight calculator (dikdörtgen / yuvarlak / içi boş yuvarlak) ----------
+  var WC_DIM_FIELDS = {
+    dikdortgen: [
+      { id: "a", label: "Uzunluk (mm)" },
+      { id: "b", label: "Genişlik (mm)" },
+      { id: "c", label: "Yükseklik (mm)" },
+    ],
+    yuvarlak: [
+      { id: "d", label: "Çap (mm)" },
+      { id: "l", label: "Boy (mm)" },
+    ],
+    icibos: [
+      { id: "d1", label: "Dış çap (mm)" },
+      { id: "d2", label: "İç çap (mm)" },
+      { id: "l", label: "Boy (mm)" },
+    ],
+    manto: [
+      { id: "d", label: "Çap (mm)" },
+      { id: "h", label: "Boy/Yükseklik (mm)" },
+      { id: "t", label: "Kalınlık (mm)" },
+    ],
+  };
+
+  function renderWcDims(){
+    var shape = document.getElementById("wcShape").value;
+    var wrap = document.getElementById("wcDims");
+    wrap.innerHTML = WC_DIM_FIELDS[shape].map(function(f){
+      return '<label>' + f.label + '<input type="number" class="num-input wc-dim" data-dim="' + f.id + '" step="0.01" value="0"></label>';
+    }).join("");
+    Array.prototype.forEach.call(wrap.querySelectorAll(".wc-dim"), function(el){
+      el.addEventListener("input", calcWeightTool);
+    });
+    document.getElementById("wcMantoInfo").style.display = shape === "manto" ? "block" : "none";
+    calcWeightTool();
+  }
+
+  function calcWeightTool(){
+    var shape = document.getElementById("wcShape").value;
+    var materialSel = document.getElementById("wcMaterial").value;
+    var density = materialSel === "manual"
+      ? (parseFloat(document.getElementById("wcManualDensity").value) || 0)
+      : parseFloat(materialSel);
+
+    var dims = {};
+    Array.prototype.forEach.call(document.querySelectorAll(".wc-dim"), function(el){
+      dims[el.dataset.dim] = parseFloat(el.value) || 0;
+    });
+
+    var volumeMm3 = 0;
+    if(shape === "dikdortgen"){
+      volumeMm3 = dims.a * dims.b * dims.c;
+    } else if(shape === "yuvarlak"){
+      volumeMm3 = Math.PI * Math.pow(dims.d/2, 2) * dims.l;
+    } else if(shape === "icibos"){
+      volumeMm3 = Math.PI * (Math.pow(dims.d1/2, 2) - Math.pow(dims.d2/2, 2)) * dims.l;
+    } else if(shape === "manto"){
+      var unrolledLength = Math.PI * dims.d; // çevre = π×çap
+      volumeMm3 = unrolledLength * dims.h * dims.t;
+      var areaM2 = (unrolledLength * dims.h) / 1e6; // mm² -> m²
+      document.getElementById("wcMantoDims").textContent =
+        fmt(unrolledLength) + " x " + fmt(dims.h) + " mm  (Alan: " + fmt(areaM2) + " m²)";
+    }
+    var weightKg = Math.max(0, (volumeMm3 / 1e6) * density);
+    document.getElementById("wcResult").textContent = fmt(weightKg) + " kg";
+    return weightKg;
+  }
+
   // ---------- Reset page (start a fresh etüt without touching the pools) ----------
   function resetPage(){
     var ok = confirm("Bu sayfadaki malzeme/işçilik satırları, etüt adı/kodu ve parça ağırlığı sıfırlanacak.\n\nÜrün havuzu ve operasyon havuzu ETKİLENMEYECEK.\n\nDevam edilsin mi?");
@@ -973,6 +1140,171 @@
     try{ return JSON.parse(el.textContent); }catch(e){ return null; }
   }
 
+  function saveAsHtml(){
+    var snapshot = {
+      etutAdi: document.getElementById("etutAdi").value,
+      etutKodu: document.getElementById("etutKodu").value,
+      notlar: document.getElementById("notlar").value,
+      usdTry: usdTry,
+      eurTry: eurTry,
+      partWeight: document.getElementById("partWeight").value,
+      catalog: catalog,
+      opCatalog: opCatalog,
+      items: items,
+      laborItems: laborItems
+    };
+    var docClone = document.documentElement.cloneNode(true);
+    var snapEl = docClone.querySelector("#snapshotData");
+    if(snapEl) snapEl.textContent = JSON.stringify(snapshot);
+    var html = "<!DOCTYPE html>\n" + docClone.outerHTML;
+    var blob = new Blob([html], {type:"text/html"});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    var base = (snapshot.etutKodu || snapshot.etutAdi || "etut").trim().replace(/[\\\/:*?"<>|]+/g,"").trim();
+    a.download = "etut-" + (base || "kayit") + ".html";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  // ---------- Cloud archive (Cloudflare KV backed, grouped by date) ----------
+  function buildCurrentSnapshot(){
+    return {
+      etutAdi: document.getElementById("etutAdi").value,
+      etutKodu: document.getElementById("etutKodu").value,
+      notlar: document.getElementById("notlar").value,
+      usdTry: usdTry,
+      eurTry: eurTry,
+      partWeight: document.getElementById("partWeight").value,
+      catalog: catalog,
+      opCatalog: opCatalog,
+      items: items,
+      laborItems: laborItems
+    };
+  }
+
+  function applySnapshotToPage(snapshot){
+    bumpIdCounterFromSnapshot(snapshot);
+    catalog = snapshot.catalog || [];
+    opCatalog = snapshot.opCatalog || [];
+    items = (snapshot.items && snapshot.items.length) ? snapshot.items : [newItem()];
+    laborItems = (snapshot.laborItems && snapshot.laborItems.length) ? snapshot.laborItems : [newLaborItem()];
+    usdTry = snapshot.usdTry || usdTry;
+    eurTry = snapshot.eurTry || eurTry;
+    document.getElementById("usdTry").value = usdTry;
+    document.getElementById("eurTry").value = eurTry;
+    document.getElementById("etutAdi").value = snapshot.etutAdi || "";
+    document.getElementById("etutKodu").value = snapshot.etutKodu || "";
+    document.getElementById("partWeight").value = snapshot.partWeight || "";
+    document.getElementById("notlar").value = snapshot.notlar || "";
+    renderCatalogTable();
+    renderOpCatalogTable();
+    renderAllItemRows();
+    renderAllLaborRows();
+    updateGrandTotals();
+  }
+
+  async function cloudSave(){
+    var snap = buildCurrentSnapshot();
+    var resp = await fetch("/api/etut/save", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify(snap)
+    });
+    var data = await resp.json();
+    if(!data.ok) throw new Error(data.error || "Kaydedilemedi");
+    alert("Buluta kaydedildi: " + (snap.etutAdi || snap.etutKodu || "(isimsiz etüt)"));
+    loadArchiveList();
+  }
+
+  function dateLabel(iso){
+    var parts = iso.split("-");
+    return parts[2] + "." + parts[1] + "." + parts[0];
+  }
+
+  async function loadArchiveList(){
+    var box = document.getElementById("archiveList");
+    box.textContent = "Yükleniyor…";
+    try{
+      var resp = await fetch("/api/etut/list");
+      var data = await resp.json();
+      if(!data.ok) throw new Error(data.error || "Liste alınamadı");
+      if(data.items.length === 0){
+        box.innerHTML = '<p style="color:#64748b;">Henüz kayıt yok. "☁️ Buluta Kaydet" ile ilk etüdünü kaydet.</p>';
+        return;
+      }
+      var groups = {};
+      data.items.forEach(function(it){
+        if(!groups[it.date]) groups[it.date] = [];
+        groups[it.date].push(it);
+      });
+      var dates = Object.keys(groups).sort().reverse();
+      box.innerHTML = dates.map(function(d){
+        var entries = groups[d];
+        var entriesHtml = entries.map(function(it){
+          var label = it.etutAdi || it.etutKodu || "(isimsiz etüt)";
+          var time = it.savedAt ? new Date(it.savedAt).toLocaleTimeString("tr-TR",{hour:"2-digit",minute:"2-digit"}) : "";
+          return '<div class="ap-entry" data-key="'+escAttr(it.key)+'">'+
+            '<span class="ap-entry-open" style="flex:1;">'+escAttr(label)+' <span style="color:#64748b;">'+time+'</span></span>'+
+            '<button class="ap-del" data-key="'+escAttr(it.key)+'" title="Sil">🗑</button>'+
+          '</div>';
+        }).join("");
+        return '<div class="ap-folder">'+
+          '<div class="ap-folder-head" data-date="'+d+'">'+
+            '<span>📅 '+dateLabel(d)+' <span class="ap-count">('+entries.length+')</span></span>'+
+            '<button class="ap-backup-btn" data-date="'+d+'" title="Bu günün yedeğini indir">⬇ Yedek al</button>'+
+          '</div>'+
+          '<div class="ap-folder-body" id="ap-body-'+d+'">'+entriesHtml+'</div>'+
+        '</div>';
+      }).join("");
+
+      // wire folder open/close
+      Array.prototype.forEach.call(box.querySelectorAll(".ap-folder-head"), function(head){
+        head.addEventListener("click", function(e){
+          if(e.target.classList.contains("ap-backup-btn")) return;
+          document.getElementById("ap-body-"+head.dataset.date).classList.toggle("open");
+        });
+      });
+      // wire backup buttons
+      Array.prototype.forEach.call(box.querySelectorAll(".ap-backup-btn"), function(btn){
+        btn.addEventListener("click", function(e){
+          e.stopPropagation();
+          window.open("/api/etut/backup?date=" + encodeURIComponent(btn.dataset.date), "_blank");
+        });
+      });
+      // wire entry open
+      Array.prototype.forEach.call(box.querySelectorAll(".ap-entry-open"), function(el){
+        el.addEventListener("click", async function(){
+          var key = el.parentElement.dataset.key;
+          try{
+            var r = await fetch("/api/etut/get?key=" + encodeURIComponent(key));
+            var snap = await r.json();
+            applySnapshotToPage(snap);
+            document.getElementById("archivePanel").classList.remove("open");
+          }catch(err){
+            alert("Etüt açılamadı: " + err.message);
+          }
+        });
+      });
+      // wire delete
+      Array.prototype.forEach.call(box.querySelectorAll(".ap-del"), function(btn){
+        btn.addEventListener("click", async function(e){
+          e.stopPropagation();
+          if(!confirm("Bu etüdü arşivden silmek istediğine emin misin?")) return;
+          await fetch("/api/etut/delete", {
+            method:"POST", headers:{"Content-Type":"application/json"},
+            body: JSON.stringify({key: btn.dataset.key})
+          });
+          loadArchiveList();
+        });
+      });
+    }catch(e){
+      box.innerHTML = '<p style="color:#f87171;">Arşiv yüklenemedi: '+escAttr(e.message)+'</p>';
+    }
+  }
+
   // ---------- Panel toggles ----------
   function wireToggle(btnId, bodyId, chevronId){
     document.getElementById(btnId).addEventListener("click", function(){
@@ -999,6 +1331,7 @@
       document.getElementById("etutAdi").value = snapshot.etutAdi || "";
       document.getElementById("etutKodu").value = snapshot.etutKodu || "";
       document.getElementById("partWeight").value = snapshot.partWeight || "";
+      document.getElementById("notlar").value = snapshot.notlar || "";
       renderCatalogTable();
       renderOpCatalogTable();
     } else {
@@ -1015,6 +1348,20 @@
     updateGrandTotals();
 
     wireToggle("catalogToggle","catalogBody","catalogChevron");
+    wireToggle("weightCalcToggle","weightCalcBody","weightCalcChevron");
+
+    document.getElementById("wcShape").addEventListener("change", renderWcDims);
+    document.getElementById("wcMaterial").addEventListener("change", function(e){
+      document.getElementById("wcManualDensityWrap").style.display = e.target.value === "manual" ? "flex" : "none";
+      calcWeightTool();
+    });
+    document.getElementById("wcManualDensity").addEventListener("input", calcWeightTool);
+    document.getElementById("wcApplyBtn").addEventListener("click", function(){
+      var w = calcWeightTool();
+      document.getElementById("partWeight").value = Math.round(w * 1000) / 1000;
+      updateGrandTotals();
+    });
+    renderWcDims();
     wireToggle("opCatalogToggle","opCatalogBody","opCatalogChevron");
 
     document.getElementById("addCatalogItem").addEventListener("click", function(){
@@ -1060,7 +1407,21 @@
     document.getElementById("exportPoolsBtn").addEventListener("click", function(){
       exportPoolsExcel().catch(function(err){ alert("Havuz Excel'i oluşturulurken hata: " + (err&&err.message?err.message:err)); console.error(err); });
     });
+    document.getElementById("quickSaveBtn").addEventListener("click", function(){
+      try{ saveAsHtml(); }catch(err){ alert("HTML kaydedilirken hata: " + (err&&err.message?err.message:err)); console.error(err); }
+    });
     document.getElementById("resetPageBtn").addEventListener("click", resetPage);
+
+    document.getElementById("archiveToggleBtn").addEventListener("click", function(){
+      document.getElementById("archivePanel").classList.add("open");
+      loadArchiveList();
+    });
+    document.getElementById("archiveCloseBtn").addEventListener("click", function(){
+      document.getElementById("archivePanel").classList.remove("open");
+    });
+    document.getElementById("cloudSaveBtn").addEventListener("click", function(){
+      cloudSave().catch(function(err){ alert("Buluta kaydedilirken hata: " + (err&&err.message?err.message:err)); console.error(err); });
+    });
   }
 
   function safeInit(){
