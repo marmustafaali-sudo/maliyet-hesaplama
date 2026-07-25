@@ -1158,7 +1158,8 @@
       if(typeof recalcAllRows === "function") recalcAllRows();
     }catch(e){
       body.innerHTML = '<div class="rw-row"><span class="rw-label" style="color:#f87171;">Kur çekilemedi</span></div>' +
-        '<div class="rw-date">TCMB\'ye ulaşılamadı olabilir. Aşağıdaki kutulardan elle girebilirsin.</div>';
+        '<div class="rw-date" style="color:#fca5a5;">' + escAttr(e.message || String(e)) + '</div>' +
+        '<div class="rw-date">Elle aşağıdaki kutulardan girebilirsin.</div>';
       console.error("Kur widget hatası:", e);
     }
   }
