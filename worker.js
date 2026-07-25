@@ -32,6 +32,9 @@ export default {
     if (url.pathname === "/api/etut/delete" && request.method === "POST") {
       return handleDelete(request, env);
     }
+    if (url.pathname === "/api/kur" && request.method === "GET") {
+      return handleKur();
+    }
 
     return env.ASSETS.fetch(request);
   },
@@ -127,4 +130,40 @@ function json(obj, status) {
     status: status || 200,
     headers: { "Content-Type": "application/json; charset=utf-8" },
   });
+}
+
+async function handleKur() {
+  try {
+    const resp = await fetch("https://www.tcmb.gov.tr/kurlar/today.xml", {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+        "Accept": "application/xml,text/xml,*/*",
+      },
+    });
+    if (!resp.ok) throw new Error("TCMB'den veri alınamadı (HTTP " + resp.status + ")");
+    const xml = await resp.text();
+    if (!xml || xml.indexOf("Currency") === -1) {
+      throw new Error("TCMB'den beklenmeyen bir yanıt geldi (ilk 120 karakter: " + xml.slice(0,120) + ")");
+    }
+
+    const tarihMatch = xml.match(/Tarih="([^"]+)"/);
+    const tarih = tarihMatch ? tarihMatch[1] : "";
+
+    function rateFor(code) {
+      const re = new RegExp('CurrencyCode="' + code + '"[\\s\\S]*?<ForexSelling>\\s*([\\d.,]*)\\s*</ForexSelling>');
+      const m = xml.match(re);
+      if (!m || !m[1]) return null;
+      return parseFloat(m[1].replace(",", "."));
+    }
+
+    const usd = rateFor("USD");
+    const eur = rateFor("EUR");
+    if (usd == null || eur == null || isNaN(usd) || isNaN(eur)) {
+      throw new Error("Kur değerleri XML içinde bulunamadı");
+    }
+
+    return json({ ok: true, usd, eur, parite: eur / usd, tarih });
+  } catch (e) {
+    return json({ ok: false, error: String(e) }, 502);
+  }
 }
