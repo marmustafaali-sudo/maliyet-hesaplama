@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Maliyet Hesaplama Tablosu</title>
-<script type="module" src="https://widgets.tradingview-widget.com/w/tr/tv-market-overview.js"></script>
 <script type="application/json" id="snapshotData"></script>
 <script>
   // Try each library from several CDN mirrors in turn, in case one is blocked
@@ -187,12 +186,25 @@
   @media print{ .archive-panel, #archiveToggleBtn, #cloudSaveBtn{ display:none !important; } }
   @media print{
   }
-  .tv-widget-box{
-    position:fixed; left:16px; top:16px; z-index:50;
-    background:#0f2338; border:1px solid var(--slate-200); border-radius:10px; overflow:hidden; box-shadow:0 4px 16px rgba(0,0,0,0.35);
+  .rate-widget{
+    position:fixed; left:16px; top:16px; z-index:50; width:190px;
+    background:#0f2338; border:1px solid var(--slate-200); border-radius:10px; padding:14px 16px;
+    box-shadow:0 4px 16px rgba(0,0,0,0.35); font-size:12px;
   }
-  @media print{ .tv-widget-box{ display:none !important; } }
-  @media (max-width: 640px){ .tv-widget-box{ position:static; width:auto; margin:0 0 16px; } }
+  .rate-widget .rw-title{
+    font-family:'Space Grotesk',sans-serif; font-size:11px; letter-spacing:.08em; text-transform:uppercase;
+    color:var(--slate-500); display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;
+  }
+  .rate-widget .rw-refresh{ background:none; border:none; color:var(--slate-500); cursor:pointer; font-size:12px; padding:0; }
+  .rate-widget .rw-refresh:hover{ color:var(--amber); }
+  .rate-widget .rw-row{ display:flex; justify-content:space-between; align-items:baseline; padding:4px 0; border-top:1px solid var(--slate-100); }
+  .rate-widget .rw-row:first-of-type{ border-top:none; }
+  .rate-widget .rw-label{ color:var(--slate-500); }
+  .rate-widget .rw-value{ font-weight:600; font-family:'IBM Plex Mono',monospace; color:var(--slate-900); }
+  .rate-widget .rw-date{ margin-top:8px; padding-top:8px; border-top:1px solid var(--slate-100); color:var(--slate-400); font-size:10px; }
+  .rate-widget .rw-date.stale{ color:var(--amber); }
+  @media print{ .rate-widget{ display:none !important; } }
+  @media (max-width: 640px){ .rate-widget{ position:static; width:auto; margin:0 0 16px; } }
   @media print{
     body{padding:0;background:#fff;color:#000;}
     .panel, .add-btn, .export-btn, .remove-btn, input[type=file], .rates-head a, .hint{display:none !important;}
@@ -237,8 +249,14 @@
 </style>
 </head>
 <body>
-<div class="tv-widget-box">
-  <tv-market-overview symbol-sectors='[{"sectionName":"KUR","symbols":["FOREXCOM:USDTRY","OANDA:EURTRY","OANDA:EURUSD"]}]' item-size="compact" chart-size="compact" style="width: 300px; height: 300px"></tv-market-overview>
+<div class="rate-widget" id="rateWidget">
+  <div class="rw-title">
+    <span>TCMB Kurları</span>
+    <button class="rw-refresh" id="rwRefresh" title="Yenile">⟳</button>
+  </div>
+  <div id="rwBody">
+    <div class="rw-row"><span class="rw-label">Yükleniyor…</span></div>
+  </div>
 </div>
 <div class="action-dock" id="actionDock">
   <div class="ad-title">İşlemler</div>
@@ -1110,6 +1128,41 @@
     return weightKg;
   }
 
+  // ---------- Live TCMB rate widget (via our own /api/kur endpoint, no CORS issue) ----------
+  function isTodayTr(dateStr){
+    var parts = (dateStr||"").split(".");
+    if(parts.length !== 3) return true;
+    var now = new Date();
+    var trToday = new Date(now.toLocaleString("en-US", {timeZone:"Europe/Istanbul"}));
+    var d = parseInt(parts[0],10), m = parseInt(parts[1],10), y = parseInt(parts[2],10);
+    return d === trToday.getDate() && m === (trToday.getMonth()+1) && y === trToday.getFullYear();
+  }
+
+  async function refreshRateWidget(){
+    var body = document.getElementById("rwBody");
+    body.innerHTML = '<div class="rw-row"><span class="rw-label">Yükleniyor…</span></div>';
+    try{
+      var resp = await fetch("/api/kur", {cache:"no-store"});
+      var r = await resp.json();
+      if(!r.ok) throw new Error(r.error || "Kur alınamadı");
+      var fresh = isTodayTr(r.tarih);
+      body.innerHTML =
+        '<div class="rw-row"><span class="rw-label">EUR satış</span><span class="rw-value">' + fmt(r.eur) + '</span></div>' +
+        '<div class="rw-row"><span class="rw-label">Dolar satış</span><span class="rw-value">' + fmt(r.usd) + '</span></div>' +
+        '<div class="rw-row"><span class="rw-label">EUR/USD parite</span><span class="rw-value">' + fmt(r.parite) + '</span></div>' +
+        '<div class="rw-date' + (fresh ? '' : ' stale') + '">' + (fresh ? 'Bugünkü kur · ' : '⚠ Güncel değil, en son yayınlanan · ') + (r.tarih||'') + '</div>';
+      usdTry = r.usd; eurTry = r.eur;
+      var usdInput = document.getElementById("usdTry"), eurInput = document.getElementById("eurTry");
+      if(usdInput) usdInput.value = r.usd;
+      if(eurInput) eurInput.value = r.eur;
+      if(typeof recalcAllRows === "function") recalcAllRows();
+    }catch(e){
+      body.innerHTML = '<div class="rw-row"><span class="rw-label" style="color:#f87171;">Kur çekilemedi</span></div>' +
+        '<div class="rw-date">TCMB\'ye ulaşılamadı olabilir. Aşağıdaki kutulardan elle girebilirsin.</div>';
+      console.error("Kur widget hatası:", e);
+    }
+  }
+
   // ---------- Reset page (start a fresh etüt without touching the pools) ----------
   function resetPage(){
     var ok = confirm("Bu sayfadaki malzeme/işçilik satırları, etüt adı/kodu ve parça ağırlığı sıfırlanacak.\n\nÜrün havuzu ve operasyon havuzu ETKİLENMEYECEK.\n\nDevam edilsin mi?");
@@ -1535,6 +1588,10 @@
     document.getElementById("cloudSaveBtn").addEventListener("click", function(){
       cloudSave().catch(function(err){ alert("Buluta kaydedilirken hata: " + (err&&err.message?err.message:err)); console.error(err); });
     });
+
+    document.getElementById("rwRefresh").addEventListener("click", refreshRateWidget);
+    refreshRateWidget();
+    setInterval(refreshRateWidget, 10 * 60 * 1000); // her 10 dakikada bir otomatik yenile
   }
 
   function safeInit(){
