@@ -42,6 +42,24 @@ export default {
       return json({ ok: false, error: "Bu işlem için yetkin yok. Silme işlemleri sadece tam yetkili hesapla yapılabilir." }, 403);
     }
 
+    // ---- Second, page-specific login for Fiyat Geçmişi (ürün havuzu + fiyat
+    // geçmişi verileri). Separate credential, checked via a token, independent
+    // of the site-wide Basic-Auth above. ----
+    const FIYAT_USER = "userali";
+    const FIYAT_PASS = "Ali1999";
+
+    if (url.pathname === "/api/fiyat-login" && request.method === "POST") {
+      return handleFiyatLogin(request, env, FIYAT_USER, FIYAT_PASS);
+    }
+
+    const FIYAT_PROTECTED_ROUTES = ["/api/fiyat/get", "/api/fiyat/delete"];
+    if (FIYAT_PROTECTED_ROUTES.includes(url.pathname)) {
+      const tokenOk = await checkFiyatToken(request, env);
+      if (!tokenOk) {
+        return json({ ok: false, error: "Bu bölüme erişmek için ayrıca giriş yapmalısın." }, 401);
+      }
+    }
+
     // ---- Etüt archive API (Cloudflare KV backed) ----
     if (url.pathname === "/api/etut/save" && request.method === "POST") {
       return handleSave(request, env);
@@ -410,6 +428,34 @@ async function handleBot(request, env) {
     return json({ ok: true, answer: answer });
   } catch (e) {
     return json({ ok: false, error: String(e) }, 500);
+  }
+}
+
+async function handleFiyatLogin(request, env, validUser, validPass) {
+  try {
+    const body = await request.json();
+    const user = String(body.username || "");
+    const pass = String(body.password || "");
+    if (user !== validUser || pass !== validPass) {
+      return json({ ok: false, error: "Kullanıcı adı veya şifre hatalı." }, 401);
+    }
+    const token = crypto.randomUUID();
+    // Token valid for 12 hours.
+    await env.ETUT_KV.put("fiyattoken:" + token, "1", { expirationTtl: 12 * 60 * 60 });
+    return json({ ok: true, token: token });
+  } catch (e) {
+    return json({ ok: false, error: String(e) }, 500);
+  }
+}
+
+async function checkFiyatToken(request, env) {
+  try {
+    const token = request.headers.get("X-Fiyat-Token");
+    if (!token) return false;
+    const value = await env.ETUT_KV.get("fiyattoken:" + token);
+    return value !== null;
+  } catch (e) {
+    return false;
   }
 }
 
