@@ -276,7 +276,7 @@ async function handleBot(request, env) {
 
     let aiResp;
     try {
-      aiResp = await env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
+      aiResp = await env.AI.run("@cf/zai-org/glm-4.7-flash", {
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: question },
@@ -286,7 +286,12 @@ async function handleBot(request, env) {
       return json({ ok: false, error: "Workers AI çağrısı başarısız: " + String(aiErr && aiErr.message ? aiErr.message : aiErr) }, 502);
     }
 
-    return json({ ok: true, answer: (aiResp && aiResp.response) || "Cevap üretilemedi." });
+    const answer =
+      (aiResp && aiResp.response) ||
+      (aiResp && aiResp.choices && aiResp.choices[0] && aiResp.choices[0].message && aiResp.choices[0].message.content) ||
+      "Cevap üretilemedi.";
+
+    return json({ ok: true, answer: answer });
   } catch (e) {
     return json({ ok: false, error: String(e) }, 500);
   }
