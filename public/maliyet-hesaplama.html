@@ -319,6 +319,7 @@
   <a class="ad-btn" href="fiyat-gecmisi.html" style="text-decoration:none;display:flex;">📊 Fiyat geçmişi</a>
   <div class="ad-sep"></div>
   <button class="ad-btn ad-danger" id="resetPageBtn">↺ Sayfayı sıfırla</button>
+  <button class="ad-btn ad-danger" id="logoutBtn">🚪 Hesaptan çık</button>
 </div>
 
 <div class="archive-panel" id="archivePanel">
@@ -1382,6 +1383,20 @@
     });
   }
 
+  // ---------- Logout (best-effort: invalidate cached Basic-Auth credentials) ----------
+  async function logout(){
+    try{
+      // Send a request with deliberately wrong credentials to the same realm.
+      // Most browsers then discard the previously cached valid credentials,
+      // so the next request re-prompts the login dialog.
+      await fetch(window.location.pathname, {
+        headers: { "Authorization": "Basic " + btoa("cikis:cikis") },
+        cache: "no-store",
+      });
+    }catch(e){}
+    window.location.reload();
+  }
+
   // ---------- Reset page (start a fresh etüt without touching the pools) ----------
   function resetPage(){
     var ok = confirm("Bu sayfadaki malzeme/işçilik satırları, etüt adı/kodu ve parça ağırlığı sıfırlanacak.\n\nÜrün havuzu ve operasyon havuzu ETKİLENMEYECEK.\n\nDevam edilsin mi?");
@@ -1805,6 +1820,9 @@
       try{ saveAsHtml(); }catch(err){ alert("HTML kaydedilirken hata: " + (err&&err.message?err.message:err)); console.error(err); }
     });
     document.getElementById("resetPageBtn").addEventListener("click", resetPage);
+    document.getElementById("logoutBtn").addEventListener("click", function(){
+      if(confirm("Hesaptan çıkmak istediğine emin misin? Tekrar giriş yapman gerekecek.")) logout();
+    });
 
     document.getElementById("archiveToggleBtn").addEventListener("click", function(){
       document.getElementById("archivePanel").classList.add("open");
