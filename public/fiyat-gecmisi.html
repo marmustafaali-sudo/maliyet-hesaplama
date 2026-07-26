@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fiyat Geçmişi</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+  @view-transition{ navigation: auto; }
+  ::view-transition-old(root), ::view-transition-new(root){
+    animation-duration: .32s;
+    animation-timing-function: cubic-bezier(.4,0,.2,1);
+  }
+  :root{
+    --slate-900:#eef4fa; --slate-800:#d7e2ee; --slate-700:#b3c4d9; --slate-600:#8fa5c0;
+    --slate-500:#7390ac; --slate-400:#5c7793; --slate-300:#3d5975; --slate-200:#284259;
+    --slate-100:#152c42; --slate-50:#0f2337; --amber:#f2a63b; --page-bg:#0a1826;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;padding:24px;background:var(--page-bg);color:var(--slate-800);font-family:'IBM Plex Sans',sans-serif;font-size:14px;}
+  .container{max-width:960px;margin:0 auto;}
+  h1{font-family:'Space Grotesk',sans-serif;font-size:21px;font-weight:600;color:var(--slate-900);margin:0 0 4px;}
+  .subtitle{font-size:13px;color:var(--slate-500);margin:0 0 20px;}
+  a.back{display:inline-block;font-size:12px;color:var(--slate-500);text-decoration:none;margin-bottom:12px;}
+  a.back:hover{color:var(--amber);}
+  .layout{display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap;}
+  .dates-col{flex:0 0 220px;border:1px solid var(--slate-200);border-radius:10px;background:var(--slate-50);padding:12px;}
+  .dates-col h2{font-family:'Space Grotesk',sans-serif;font-size:13px;color:var(--slate-700);margin:0 0 10px;}
+  .date-item{
+    display:block;width:100%;text-align:left;background:none;border:none;color:var(--slate-700);
+    font-size:13px;padding:8px 10px;border-radius:6px;cursor:pointer;margin-bottom:4px;
+  }
+  .date-item:hover, .date-item.active{background:var(--slate-100);color:var(--amber);}
+  .date-item .di-count{display:block;font-size:11px;color:var(--slate-400);}
+  .detail-col{flex:1 1 420px;border:1px solid var(--slate-200);border-radius:10px;background:var(--slate-50);padding:16px;min-height:200px;}
+  .detail-col h2{font-family:'Space Grotesk',sans-serif;font-size:13px;color:var(--slate-700);margin:0 0 12px;}
+  table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  thead th{text-align:left;font-weight:500;color:var(--slate-600);background:var(--slate-100);padding:8px 10px;font-size:11px;text-transform:uppercase;letter-spacing:.03em;}
+  td{padding:6px 10px;border-top:1px solid var(--slate-100);}
+  .right{text-align:right;font-family:'IBM Plex Mono',monospace;}
+  .empty-hint{color:var(--slate-400);font-size:13px;}
+  .mini-table{width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:10px;}
+  .mini-table thead th{text-align:left;color:var(--slate-500);padding:4px 8px;font-size:11px;}
+  .mini-table td{padding:4px 8px;border-top:1px solid var(--slate-100);}
+  .mini-table input,.mini-table select{
+    border:1px solid var(--slate-300);border-radius:6px;padding:5px 7px;font-size:12.5px;
+    font-family:inherit;color:var(--slate-800);background:var(--slate-50);width:100%;
+  }
+  .mini-table input:focus,.mini-table select:focus{outline:2px solid var(--amber);outline-offset:1px;}
+  .mini-table .num{text-align:right;}
+  .pool-panel{border:1px solid var(--slate-200);border-radius:10px;background:var(--slate-50);padding:16px;margin-bottom:24px;}
+  .pool-panel h2{font-family:'Space Grotesk',sans-serif;font-size:14px;color:var(--slate-900);margin:0 0 4px;}
+  .pool-panel .pool-sub{font-size:12px;color:var(--slate-500);margin:0 0 14px;}
+  .pool-add-btn{
+    display:inline-flex;align-items:center;gap:6px;font-size:12.5px;border:1px solid var(--slate-300);
+    background:transparent;border-radius:6px;padding:6px 12px;cursor:pointer;color:var(--slate-700);margin-right:8px;
+  }
+  .pool-add-btn:hover{border-color:var(--amber);color:var(--amber);}
+  .remove-btn{background:none;border:none;cursor:pointer;color:var(--slate-400);font-size:14px;}
+  .remove-btn:hover{color:#f87171;}
+  .save-status{font-size:11px;margin-left:8px;}
+  .save-status.saved{color:#34d399;}
+  .save-status.error{color:#f87171;}
+</style>
+</head>
+<body>
+<div class="container">
+  <a class="back" href="maliyet-hesaplama.html">← Maliyet hesaplama tablosuna dön</a>
+  <h1>Fiyat Geçmişi &amp; Ürün Havuzu</h1>
+  <p class="subtitle">Ürün ve operasyon havuzunu buradan yönet — maliyet hesaplama aracı havuzu buradan çeker. (Tablodaki "Elle gir…" ile tek seferlik manuel ürün girme seçeneği ayrıca duruyor, etkilenmiyor.)</p>
+
+  <div class="pool-panel">
+    <h2>Ürün havuzu <span id="poolSaveStatus" class="save-status"></span></h2>
+    <p class="pool-sub">Buradaki değişiklikler kaydettiğinde tüm cihazlarda/kullanıcılarda güncellenir.</p>
+    <table class="mini-table">
+      <thead><tr><th>Ürün adı</th><th style="width:110px;">Birim fiyat</th><th style="width:90px;">Para birimi</th><th style="width:90px;">Ölçü birimi</th><th style="width:28px;"></th></tr></thead>
+      <tbody id="poolCatalogBody"></tbody>
+    </table>
+    <button class="pool-add-btn" id="poolAddProduct">＋ Ürün ekle</button>
+    <button class="pool-add-btn" id="poolSaveBtn">☁️ Havuzu kaydet</button>
+  </div>
+
+  <div class="pool-panel">
+    <h2>Operasyon havuzu</h2>
+    <table class="mini-table">
+      <thead><tr><th>Operasyon adı</th><th style="width:130px;">Saatlik ücret</th><th style="width:90px;">Para birimi</th><th style="width:28px;"></th></tr></thead>
+      <tbody id="poolOpBody"></tbody>
+    </table>
+    <button class="pool-add-btn" id="poolAddOp">＋ Operasyon ekle</button>
+    <button class="pool-add-btn" id="poolSaveBtn2">☁️ Havuzu kaydet</button>
+  </div>
+
+  <div class="layout">
+    <div class="dates-col">
+      <h2>Tarihler</h2>
+      <div id="datesList"><p class="empty-hint">Yükleniyor…</p></div>
+    </div>
+    <div class="detail-col">
+      <h2 id="detailTitle">Bir tarih seç</h2>
+      <div id="detailBody"><p class="empty-hint">Soldan bir tarih seçtiğinde o günün ürün fiyat listesi burada görünecek.</p></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  function fmt(n){
+    if(!isFinite(n)) n = 0;
+    return new Intl.NumberFormat("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2}).format(n);
+  }
+  function escAttr(s){
+    return String(s == null ? "" : s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;");
+  }
+  function dateLabel(iso){
+    var p = iso.split("-");
+    return p[2] + "." + p[1] + "." + p[0];
+  }
+
+  var UNIT_LABELS = {kg:"kg", dm3:"dm\u00b3", ton:"ton", adet:"adet"};
+
+  async function loadDates(){
+    var box = document.getElementById("datesList");
+    try{
+      var resp = await fetch("/api/fiyat/list");
+      var data = await resp.json();
+      if(!data.ok) throw new Error(data.error || "Liste alınamadı");
+      if(data.items.length === 0){
+        box.innerHTML = '<p class="empty-hint">Henüz kayıt yok.</p>';
+        return;
+      }
+      var groups = {};
+      data.items.forEach(function(it){
+        if(!groups[it.date]) groups[it.date] = it; // keep first (latest) per date
+      });
+      var dates = Object.keys(groups).sort().reverse();
+      box.innerHTML = dates.map(function(d){
+        var it = groups[d];
+        var timeStr = "";
+        if(it.savedAt){
+          var dt = new Date(it.savedAt);
+          timeStr = " · " + dt.toLocaleTimeString("tr-TR",{hour:"2-digit",minute:"2-digit"});
+        }
+        return '<button class="date-item" data-key="'+escAttr(it.key)+'" data-date="'+d+'">'+
+          dateLabel(d) + timeStr +
+          '<span class="di-count">'+it.urunSayisi+' ürün · '+it.operasyonSayisi+' operasyon</span>'+
+        '</button>';
+      }).join("");
+      Array.prototype.forEach.call(box.querySelectorAll(".date-item"), function(btn){
+        btn.addEventListener("click", function(){
+          Array.prototype.forEach.call(box.querySelectorAll(".date-item"), function(b){ b.classList.remove("active"); });
+          btn.classList.add("active");
+          loadDetail(btn.dataset.key, btn.dataset.date);
+        });
+      });
+    }catch(e){
+      box.innerHTML = '<p class="error-text">Yüklenemedi: '+escAttr(e.message)+'</p>';
+    }
+  }
+
+  async function loadDetail(key, date){
+    var title = document.getElementById("detailTitle");
+    var body = document.getElementById("detailBody");
+    title.textContent = dateLabel(date) + " tarihli fiyat listesi";
+    body.innerHTML = '<p class="empty-hint">Yükleniyor…</p>';
+    try{
+      var resp = await fetch("/api/fiyat/get?key=" + encodeURIComponent(key));
+      var snap = await resp.json();
+      var catalog = snap.catalog || [];
+      var opCatalog = snap.opCatalog || [];
+
+      var html = "";
+      html += '<table style="margin-bottom:20px;"><thead><tr><th>Ürün</th><th class="right">Birim fiyat</th><th>P.birimi</th><th>Birim</th></tr></thead><tbody>';
+      catalog.forEach(function(p){
+        html += '<tr><td>'+escAttr(p.name||"")+'</td><td class="right">'+fmt(p.price)+'</td><td>'+escAttr(p.currency||"")+'</td><td>'+escAttr(UNIT_LABELS[p.unit]||p.unit||"")+'</td></tr>';
+      });
+      html += '</tbody></table>';
+
+      if(opCatalog.length){
+        html += '<table><thead><tr><th>Operasyon</th><th class="right">Saatlik ücret</th><th>P.birimi</th></tr></thead><tbody>';
+        opCatalog.forEach(function(o){
+          html += '<tr><td>'+escAttr(o.name||"")+'</td><td class="right">'+fmt(o.hourlyRate)+'</td><td>'+escAttr(o.currency||"")+'</td></tr>';
+        });
+        html += '</tbody></table>';
+      }
+      body.innerHTML = html;
+    }catch(e){
+      body.innerHTML = '<p class="error-text">Yüklenemedi: '+escAttr(e.message)+'</p>';
+    }
+  }
+
+  var CURRENCIES = ["TL","USD","EUR"];
+  var UNITS = ["kg","dm3","ton","adet"];
+  var idCounter = 1;
+  function newId(){ return "id"+(idCounter++); }
+
+  var poolCatalog = [];
+  var poolOpCatalog = [];
+
+  function optionsHTML(list, labels, selected){
+    return list.map(function(v){
+      var lbl = labels ? (labels[v]||v) : v;
+      return '<option value="'+v+'"'+(v===selected?' selected':'')+'>'+lbl+'</option>';
+    }).join("");
+  }
+
+  function setPoolStatus(text, cls){
+    var el = document.getElementById("poolSaveStatus");
+    el.textContent = text; el.className = "save-status " + (cls||"");
+    if(text) setTimeout(function(){ el.textContent=""; el.className="save-status"; }, 1800);
+  }
+
+  async function savePoolToCloud(){
+    setPoolStatus("Kaydediliyor…","");
+    try{
+      var resp = await fetch("/api/katalog/save", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ catalog: poolCatalog, opCatalog: poolOpCatalog })
+      });
+      var data = await resp.json();
+      if(!data.ok) throw new Error(data.error || "kaydedilemedi");
+      setPoolStatus("Kaydedildi","saved");
+    }catch(e){
+      setPoolStatus("Kaydedilemedi: "+e.message,"error");
+    }
+  }
+
+  function renderPoolCatalog(){
+    var tbody = document.getElementById("poolCatalogBody");
+    tbody.innerHTML = "";
+    poolCatalog.forEach(function(p){
+      var tr = document.createElement("tr");
+      tr.innerHTML =
+        '<td><input type="text" class="f-name" value="'+escAttr(p.name)+'"></td>'+
+        '<td><input type="number" step="0.01" class="f-price num" value="'+p.price+'"></td>'+
+        '<td><select class="f-currency">'+optionsHTML(CURRENCIES,null,p.currency)+'</select></td>'+
+        '<td><select class="f-unit">'+optionsHTML(UNITS,{kg:"kg",dm3:"dm\u00b3",ton:"ton",adet:"adet"},p.unit)+'</select></td>'+
+        '<td><button class="remove-btn">🗑</button></td>';
+      tr.querySelector(".f-name").addEventListener("input", function(e){ p.name = e.target.value; });
+      tr.querySelector(".f-price").addEventListener("input", function(e){ p.price = parseFloat(e.target.value)||0; });
+      tr.querySelector(".f-currency").addEventListener("change", function(e){ p.currency = e.target.value; });
+      tr.querySelector(".f-unit").addEventListener("change", function(e){ p.unit = e.target.value; });
+      tr.querySelector(".remove-btn").addEventListener("click", function(){
+        poolCatalog = poolCatalog.filter(function(x){ return x.id !== p.id; });
+        renderPoolCatalog();
+      });
+      tbody.appendChild(tr);
+    });
+  }
+
+  function renderPoolOpCatalog(){
+    var tbody = document.getElementById("poolOpBody");
+    tbody.innerHTML = "";
+    poolOpCatalog.forEach(function(o){
+      var tr = document.createElement("tr");
+      tr.innerHTML =
+        '<td><input type="text" class="f-name" value="'+escAttr(o.name)+'"></td>'+
+        '<td><input type="number" step="0.01" class="f-rate num" value="'+o.hourlyRate+'"></td>'+
+        '<td><select class="f-currency">'+optionsHTML(CURRENCIES,null,o.currency)+'</select></td>'+
+        '<td><button class="remove-btn">🗑</button></td>';
+      tr.querySelector(".f-name").addEventListener("input", function(e){ o.name = e.target.value; });
+      tr.querySelector(".f-rate").addEventListener("input", function(e){ o.hourlyRate = parseFloat(e.target.value)||0; });
+      tr.querySelector(".f-currency").addEventListener("change", function(e){ o.currency = e.target.value; });
+      tr.querySelector(".remove-btn").addEventListener("click", function(){
+        poolOpCatalog = poolOpCatalog.filter(function(x){ return x.id !== o.id; });
+        renderPoolOpCatalog();
+      });
+      tbody.appendChild(tr);
+    });
+  }
+
+  async function loadPool(){
+    try{
+      var resp = await fetch("/api/katalog");
+      var data = await resp.json();
+      if(data.ok){
+        poolCatalog = data.catalog || [];
+        poolOpCatalog = data.opCatalog || [];
+      }
+    }catch(e){
+      console.error("Havuz yüklenemedi:", e);
+    }
+    renderPoolCatalog();
+    renderPoolOpCatalog();
+  }
+
+  document.getElementById("poolAddProduct").addEventListener("click", function(){
+    poolCatalog.push({id:newId(), name:"", price:0, currency:"TL", unit:"adet"});
+    renderPoolCatalog();
+  });
+  document.getElementById("poolAddOp").addEventListener("click", function(){
+    poolOpCatalog.push({id:newId(), name:"", hourlyRate:0, currency:"TL"});
+    renderPoolOpCatalog();
+  });
+  document.getElementById("poolSaveBtn").addEventListener("click", savePoolToCloud);
+  document.getElementById("poolSaveBtn2").addEventListener("click", savePoolToCloud);
+
+  loadPool();
+  loadDates();
+})();
+</script>
+</body>
+</html>

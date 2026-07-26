@@ -43,6 +43,11 @@
 </script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+  @view-transition{ navigation: auto; }
+  ::view-transition-old(root), ::view-transition-new(root){
+    animation-duration: .32s;
+    animation-timing-function: cubic-bezier(.4,0,.2,1);
+  }
   :root{
     --slate-900:#eef4fa; --slate-800:#d7e2ee; --slate-700:#b3c4d9; --slate-600:#8fa5c0;
     --slate-500:#7390ac; --slate-400:#5c7793; --slate-300:#3d5975; --slate-200:#284259;
@@ -271,6 +276,7 @@
   <button class="ad-btn" id="quickSaveBtn">💾 HTML olarak indir</button>
   <button class="ad-btn" id="archiveToggleBtn">📁 Etüt arşivi</button>
   <button class="ad-btn" id="exportPoolsBtn">⬇ Havuzları dışa aktar</button>
+  <a class="ad-btn" href="fiyat-gecmisi.html" style="text-decoration:none;display:flex;">📊 Fiyat geçmişi</a>
   <div class="ad-sep"></div>
   <button class="ad-btn ad-danger" id="resetPageBtn">↺ Sayfayı sıfırla</button>
 </div>
@@ -314,6 +320,8 @@
       </table>
       <button class="add-btn" id="addCatalogItem">＋ Ürün ekle</button>
       <button class="add-btn" id="importCatalogBtn">⬆ Excel'den içe aktar</button>
+      <button class="add-btn" id="saveFiyatSnapshotBtn">📊 Bu ayın fiyatlarını kaydet</button>
+      <p class="hint" id="lastFiyatSnapshotHint">Son fiyat kaydı kontrol ediliyor…</p>
       <input type="file" id="importCatalogFile" accept=".xlsx,.xls" style="display:none">
       <p class="hint">Excel'de "ÜRÜN", "BİRİM", "BİRİM FİYAT", "DÖVİZ CİNSİ" başlıklı sütunlar aranır — sütun sırası fark etmez. İçe aktarma mevcut havuzun üzerine yazar.</p>
     </div>
@@ -553,6 +561,34 @@
       statusEl.textContent = "Kaydedilemedi"; statusEl.className = "save-status error";
     }
     setTimeout(function(){ statusEl.textContent = ""; statusEl.className = "save-status"; }, 1500);
+    syncCatalogToCloud();
+  }
+
+  function syncCatalogToCloud(){
+    fetch("/api/katalog/save", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ catalog: catalog, opCatalog: opCatalog })
+    }).catch(function(e){ console.error("Havuz buluta yazılamadı:", e); });
+  }
+
+  async function loadCatalogFromCloud(){
+    try{
+      var resp = await fetch("/api/katalog");
+      var data = await resp.json();
+      if(!data.ok) return false;
+      if(data.empty || ((data.catalog||[]).length === 0 && (data.opCatalog||[]).length === 0)) return false;
+      catalog = data.catalog || [];
+      opCatalog = data.opCatalog || [];
+      try{
+        localStorage.setItem("maliyet-product-catalog", JSON.stringify(catalog));
+        localStorage.setItem("maliyet-operation-catalog", JSON.stringify(opCatalog));
+      }catch(e){}
+      return true;
+    }catch(e){
+      console.error("Havuz buluttan çekilemedi, yerel kopya kullanılacak:", e);
+      return false;
+    }
   }
 
   function optionsHTML(list, labels, selected){
@@ -604,6 +640,7 @@
       statusEl.textContent = "Kaydedilemedi"; statusEl.className = "save-status error";
     }
     setTimeout(function(){ statusEl.textContent = ""; statusEl.className = "save-status"; }, 1500);
+    syncCatalogToCloud();
   }
   function renderOpCatalogTable(){
     var tbody = document.getElementById("opCatalogTbody");
@@ -1170,6 +1207,37 @@
     }
   }
 
+  async function saveFiyatSnapshot(){
+    var resp = await fetch("/api/fiyat/save", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ catalog: catalog, opCatalog: opCatalog })
+    });
+    var data = await resp.json();
+    if(!data.ok) throw new Error(data.error || "Kaydedilemedi");
+    alert("Fiyat anlık görüntüsü kaydedildi (" + catalog.length + " ürün, " + opCatalog.length + " operasyon).\n\n'Fiyat Geçmişi' sayfasından görebilirsin.");
+    loadLastFiyatSnapshotInfo();
+  }
+
+  async function loadLastFiyatSnapshotInfo(){
+    var hint = document.getElementById("lastFiyatSnapshotHint");
+    try{
+      var resp = await fetch("/api/fiyat/list");
+      var data = await resp.json();
+      if(!data.ok) throw new Error(data.error || "alınamadı");
+      if(!data.items || data.items.length === 0){
+        hint.textContent = "Henüz kaydedilmiş bir fiyat anlık görüntüsü yok.";
+        return;
+      }
+      var latest = data.items[0]; // list is sorted newest-first
+      var d = new Date(latest.savedAt);
+      var when = d.toLocaleDateString("tr-TR") + " " + d.toLocaleTimeString("tr-TR",{hour:"2-digit",minute:"2-digit"});
+      hint.textContent = "Son fiyat kaydı: " + when + " (" + latest.urunSayisi + " ürün, " + latest.operasyonSayisi + " operasyon)";
+    }catch(e){
+      hint.textContent = "Son fiyat kaydı bilgisi alınamadı.";
+    }
+  }
+
   // ---------- Reset page (start a fresh etüt without touching the pools) ----------
   function resetPage(){
     var ok = confirm("Bu sayfadaki malzeme/işçilik satırları, etüt adı/kodu ve parça ağırlığı sıfırlanacak.\n\nÜrün havuzu ve operasyon havuzu ETKİLENMEYECEK.\n\nDevam edilsin mi?");
@@ -1488,7 +1556,7 @@
   }
 
   // ---------- Init ----------
-  function init(){
+  async function init(){
     var snapshot = readSnapshot();
 
     if(snapshot){
@@ -1508,8 +1576,11 @@
       renderCatalogTable();
       renderOpCatalogTable();
     } else {
-      loadCatalog();
-      loadOpCatalog();
+      var fromCloud = await loadCatalogFromCloud();
+      if(!fromCloud){
+        loadCatalog();
+        loadOpCatalog();
+      }
       renderCatalogTable();
       renderOpCatalogTable();
       items = [newItem()];
@@ -1595,10 +1666,14 @@
     document.getElementById("cloudSaveBtn").addEventListener("click", function(){
       cloudSave().catch(function(err){ alert("Buluta kaydedilirken hata: " + (err&&err.message?err.message:err)); console.error(err); });
     });
+    document.getElementById("saveFiyatSnapshotBtn").addEventListener("click", function(){
+      saveFiyatSnapshot().catch(function(err){ alert("Fiyat anlık görüntüsü kaydedilirken hata: " + (err&&err.message?err.message:err)); console.error(err); });
+    });
 
     document.getElementById("rwRefresh").addEventListener("click", refreshRateWidget);
     refreshRateWidget();
     setInterval(refreshRateWidget, 10 * 60 * 1000); // her 10 dakikada bir otomatik yenile
+    loadLastFiyatSnapshotInfo();
   }
 
   function safeInit(){
@@ -1615,7 +1690,10 @@
             "İnterneti kontrol edip sayfayı yenile (F5).";
         }
       });
-      init();
+      init().catch(function(err){
+        console.error(err);
+        alert("Sayfa yüklenirken bir hata oluştu, bu yüzden butonlar çalışmıyor olabilir:\n\n" + (err && err.message ? err.message : err) + "\n\nLütfen bu mesajı ekran görüntüsüyle paylaş.");
+      });
     }catch(err){
       console.error(err);
       alert("Sayfa yüklenirken bir hata oluştu, bu yüzden butonlar çalışmıyor olabilir:\n\n" + (err && err.message ? err.message : err) + "\n\nLütfen bu mesajı ekran görüntüsüyle paylaş.");
