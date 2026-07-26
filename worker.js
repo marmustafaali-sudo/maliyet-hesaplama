@@ -1,11 +1,30 @@
 export default {
   async fetch(request, env) {
-    const VALID_USER = "kardokmak";
-    const VALID_PASS = "kardokmak78";
-    const expected = "Basic " + btoa(`${VALID_USER}:${VALID_PASS}`);
+    const VALID_USERS = {
+      aliuser: { pass: "Ali1999", role: "admin" },
+      kardokmak: { pass: "kardokmak78", role: "kisitli" },
+    };
 
-    const auth = request.headers.get("Authorization");
-    if (auth !== expected) {
+    function checkAuth(req) {
+      const auth = req.headers.get("Authorization");
+      if (!auth || !auth.startsWith("Basic ")) return null;
+      let decoded;
+      try {
+        decoded = atob(auth.slice(6));
+      } catch (e) {
+        return null;
+      }
+      const idx = decoded.indexOf(":");
+      if (idx === -1) return null;
+      const user = decoded.slice(0, idx);
+      const pass = decoded.slice(idx + 1);
+      const entry = VALID_USERS[user];
+      if (entry && entry.pass === pass) return { user, role: entry.role };
+      return null;
+    }
+
+    const authInfo = checkAuth(request);
+    if (!authInfo) {
       return new Response("Bu siteye erişmek için giriş yapmanız gerekiyor.", {
         status: 401,
         headers: {
@@ -15,6 +34,13 @@ export default {
     }
 
     const url = new URL(request.url);
+
+    // Delete-capable routes require the "admin" role (aliuser). The
+    // restricted user (kardokmak) can view/save everything but not delete.
+    const DELETE_ROUTES = ["/api/etut/delete", "/api/fiyat/delete"];
+    if (DELETE_ROUTES.includes(url.pathname) && authInfo.role !== "admin") {
+      return json({ ok: false, error: "Bu işlem için yetkin yok. Silme işlemleri sadece tam yetkili hesapla yapılabilir." }, 403);
+    }
 
     // ---- Etüt archive API (Cloudflare KV backed) ----
     if (url.pathname === "/api/etut/save" && request.method === "POST") {
@@ -43,6 +69,9 @@ export default {
     }
     if (url.pathname === "/api/fiyat/get" && request.method === "GET") {
       return handleFiyatGet(url, env);
+    }
+    if (url.pathname === "/api/fiyat/delete" && request.method === "POST") {
+      return handleFiyatDelete(request, env);
     }
     if (url.pathname === "/api/katalog" && request.method === "GET") {
       return handleKatalogGet(env);
@@ -185,6 +214,17 @@ async function handleFiyatGet(url, env) {
     const value = await env.ETUT_KV.get(key);
     if (value === null) return json({ ok: false, error: "bulunamadı" }, 404);
     return new Response(value, { headers: { "Content-Type": "application/json; charset=utf-8" } });
+  } catch (e) {
+    return json({ ok: false, error: String(e) }, 500);
+  }
+}
+
+async function handleFiyatDelete(request, env) {
+  try {
+    const body = await request.json();
+    if (!body.key) return json({ ok: false, error: "key gerekli" }, 400);
+    await env.ETUT_KV.delete(body.key);
+    return json({ ok: true });
   } catch (e) {
     return json({ ok: false, error: String(e) }, 500);
   }
