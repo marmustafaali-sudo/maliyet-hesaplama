@@ -191,11 +191,12 @@
   @media print{ .bot-fab, .bot-panel{ display:none !important; } }
 
   .cat-mascot{
-    position:fixed; left:16px; bottom:16px; z-index:40; width:66px; height:56px;
+    position:fixed; left:16px; bottom:16px; z-index:40; width:56px; height:66px;
     filter:drop-shadow(0 4px 10px rgba(0,0,0,0.4)); pointer-events:none;
   }
   @media print{ .cat-mascot{ display:none !important; } }
   @media (max-width: 640px){ .cat-mascot{ display:none; } }
+  .droid-eye{ filter:drop-shadow(0 0 4px #ff3b3b) drop-shadow(0 0 8px #ff3b3b); }
   @media (max-width: 860px){
     .action-dock{ position:static; width:auto; margin:0 0 20px; flex-direction:row; flex-wrap:wrap; }
   }
@@ -326,24 +327,29 @@
   <div id="archiveList" style="font-size:12px;color:#94a3b8;">Yükleniyor…</div>
 </div>
 
-<button class="bot-fab" id="botFab" title="Site verileri hakkında soru sor">💬</button>
+<button class="bot-fab" id="botFab" title="Site verileri hakkında soru sor">
+  <svg viewBox="0 0 120 100" width="30" height="26">
+    <path d="M14,72 A46,44 0 0 1 106,72 Z" fill="#1a1305" stroke="#1a1305" stroke-width="2.5"/>
+    <rect x="45" y="30" width="30" height="5" rx="2" fill="#1a1305" opacity="0.5"/>
+    <circle cx="60" cy="48" r="17" fill="#1a1305"/>
+    <circle cx="60" cy="48" r="8" fill="#ff2b2b"/>
+    <circle cx="58" cy="46" r="2.5" fill="#ffd7d7" opacity="0.9"/>
+  </svg>
+</button>
 
 <div class="cat-mascot" id="catMascot">
   <svg viewBox="0 0 120 100" width="66" height="56">
-    <polygon points="18,32 33,4 46,34" fill="#0f2338" stroke="#f2a63b" stroke-width="2.5"/>
-    <polygon points="102,32 87,4 74,34" fill="#0f2338" stroke="#f2a63b" stroke-width="2.5"/>
-    <ellipse cx="60" cy="56" rx="46" ry="38" fill="#0f2338" stroke="#f2a63b" stroke-width="2.5"/>
-    <circle cx="42" cy="52" r="12" fill="#eef4fa"/>
-    <circle cx="78" cy="52" r="12" fill="#eef4fa"/>
-    <circle id="catPupilL" cx="42" cy="52" r="5.5" fill="#0a1826"/>
-    <circle id="catPupilR" cx="78" cy="52" r="5.5" fill="#0a1826"/>
-    <polygon points="54,66 66,66 60,74" fill="#f2a63b"/>
-    <path d="M60,74 Q54,80 48,77" stroke="#f2a63b" stroke-width="2" fill="none" stroke-linecap="round"/>
-    <path d="M60,74 Q66,80 72,77" stroke="#f2a63b" stroke-width="2" fill="none" stroke-linecap="round"/>
-    <line x1="6" y1="58" x2="34" y2="55" stroke="#f2a63b" stroke-width="1.5"/>
-    <line x1="6" y1="67" x2="34" y2="64" stroke="#f2a63b" stroke-width="1.5"/>
-    <line x1="114" y1="58" x2="86" y2="55" stroke="#f2a63b" stroke-width="1.5"/>
-    <line x1="114" y1="67" x2="86" y2="64" stroke="#f2a63b" stroke-width="1.5"/>
+    <rect x="34" y="72" width="52" height="18" rx="5" fill="#0f2338" stroke="#f2a63b" stroke-width="2.5"/>
+    <rect x="40" y="76" width="10" height="4" rx="1.5" fill="#f2a63b" opacity="0.6"/>
+    <rect x="70" y="76" width="10" height="4" rx="1.5" fill="#f2a63b" opacity="0.6"/>
+    <path d="M14,72 A46,44 0 0 1 106,72 Z" fill="#0f2338" stroke="#f2a63b" stroke-width="2.5"/>
+    <line x1="14" y1="72" x2="106" y2="72" stroke="#f2a63b" stroke-width="1.5"/>
+    <rect x="22" y="56" width="16" height="6" rx="2" fill="#f2a63b" opacity="0.55"/>
+    <rect x="82" y="56" width="16" height="6" rx="2" fill="#f2a63b" opacity="0.55"/>
+    <rect x="45" y="30" width="30" height="5" rx="2" fill="#f2a63b" opacity="0.4"/>
+    <circle cx="60" cy="48" r="17" fill="#081420" stroke="#f2a63b" stroke-width="2"/>
+    <circle id="catPupilL" class="droid-eye" cx="60" cy="48" r="8" fill="#ff2b2b"/>
+    <circle id="catPupilR" cx="60" cy="48" r="2.5" fill="#ffd7d7" opacity="0.85"/>
   </svg>
 </div>
 <div class="bot-panel" id="botPanel">
@@ -1353,13 +1359,13 @@
     }
   }
 
-  // ---------- Cat mascot: eyes follow the mouse ----------
+  // ---------- Droid mascot: red laser eye follows the mouse ----------
   function initCatMascot(){
     var cat = document.getElementById("catMascot");
-    var pupilL = document.getElementById("catPupilL");
-    var pupilR = document.getElementById("catPupilR");
-    if(!cat || !pupilL || !pupilR) return;
-    var maxOffset = 3.2;
+    var lens = document.getElementById("catPupilL");
+    var glint = document.getElementById("catPupilR");
+    if(!cat || !lens || !glint) return;
+    var maxOffset = 7;
     document.addEventListener("mousemove", function(e){
       var rect = cat.getBoundingClientRect();
       var cx = rect.left + rect.width/2;
@@ -1369,10 +1375,10 @@
       var dist = Math.sqrt(dx*dx + dy*dy) || 1;
       var ox = (dx/dist) * maxOffset;
       var oy = (dy/dist) * maxOffset;
-      pupilL.setAttribute("cx", 42 + ox);
-      pupilL.setAttribute("cy", 52 + oy);
-      pupilR.setAttribute("cx", 78 + ox);
-      pupilR.setAttribute("cy", 52 + oy);
+      lens.setAttribute("cx", 60 + ox);
+      lens.setAttribute("cy", 48 + oy);
+      glint.setAttribute("cx", 60 + ox*1.3 - 2);
+      glint.setAttribute("cy", 48 + oy*1.3 - 2);
     });
   }
 
