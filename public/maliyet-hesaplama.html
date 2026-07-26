@@ -4,6 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Maliyet Hesaplama Tablosu</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#0a1826">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Maliyet">
 <script type="application/json" id="snapshotData"></script>
 <script>
   // Try each library from several CDN mirrors in turn, in case one is blocked
@@ -1618,6 +1624,14 @@
 
   if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", safeInit);
   else safeInit();
+
+  if("serviceWorker" in navigator){
+    window.addEventListener("load", function(){
+      navigator.serviceWorker.register("/sw.js").catch(function(e){
+        console.error("Service worker kaydedilemedi:", e);
+      });
+    });
+  }
 })();
 </script>
 </body>
