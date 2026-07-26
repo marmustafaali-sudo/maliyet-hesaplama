@@ -1,0 +1,336 @@
+export default {
+  async fetch(request, env) {
+    const VALID_USER = "kardokmak";
+    const VALID_PASS = "kardokmak78";
+    const expected = "Basic " + btoa(`${VALID_USER}:${VALID_PASS}`);
+
+    const auth = request.headers.get("Authorization");
+    if (auth !== expected) {
+      return new Response("Bu siteye erişmek için giriş yapmanız gerekiyor.", {
+        status: 401,
+        headers: {
+          "WWW-Authenticate": 'Basic realm="Giris Gerekli", charset="UTF-8"',
+        },
+      });
+    }
+
+    const url = new URL(request.url);
+
+    // ---- Etüt archive API (Cloudflare KV backed) ----
+    if (url.pathname === "/api/etut/save" && request.method === "POST") {
+      return handleSave(request, env);
+    }
+    if (url.pathname === "/api/etut/list" && request.method === "GET") {
+      return handleList(env);
+    }
+    if (url.pathname === "/api/etut/get" && request.method === "GET") {
+      return handleGet(url, env);
+    }
+    if (url.pathname === "/api/etut/backup" && request.method === "GET") {
+      return handleBackup(url, env);
+    }
+    if (url.pathname === "/api/etut/delete" && request.method === "POST") {
+      return handleDelete(request, env);
+    }
+    if (url.pathname === "/api/kur" && request.method === "GET") {
+      return handleKur();
+    }
+    if (url.pathname === "/api/fiyat/save" && request.method === "POST") {
+      return handleFiyatSave(request, env);
+    }
+    if (url.pathname === "/api/fiyat/list" && request.method === "GET") {
+      return handleFiyatList(env);
+    }
+    if (url.pathname === "/api/fiyat/get" && request.method === "GET") {
+      return handleFiyatGet(url, env);
+    }
+    if (url.pathname === "/api/katalog" && request.method === "GET") {
+      return handleKatalogGet(env);
+    }
+    if (url.pathname === "/api/katalog/save" && request.method === "POST") {
+      return handleKatalogSave(request, env);
+    }
+    if (url.pathname === "/api/bot" && request.method === "POST") {
+      return handleBot(request, env);
+    }
+
+    return env.ASSETS.fetch(request);
+  },
+};
+
+function todayIso(d) {
+  return d.toISOString().slice(0, 10); // YYYY-MM-DD
+}
+
+async function handleSave(request, env) {
+  try {
+    const body = await request.json();
+    const now = new Date();
+    const dateStr = todayIso(now);
+    const key = `etut:${dateStr}:${now.getTime()}`;
+    const metadata = {
+      etutAdi: body.etutAdi || "",
+      etutKodu: body.etutKodu || "",
+      savedAt: now.toISOString(),
+    };
+    await env.ETUT_KV.put(key, JSON.stringify(body), { metadata });
+    return json({ ok: true, key });
+  } catch (e) {
+    return json({ ok: false, error: String(e) }, 500);
+  }
+}
+
+async function handleList(env) {
+  try {
+    const result = await env.ETUT_KV.list({ prefix: "etut:" });
+    const items = result.keys.map((k) => ({
+      key: k.name,
+      date: k.name.split(":")[1],
+      etutAdi: (k.metadata && k.metadata.etutAdi) || "",
+      etutKodu: (k.metadata && k.metadata.etutKodu) || "",
+      savedAt: (k.metadata && k.metadata.savedAt) || "",
+    }));
+    // newest first
+    items.sort((a, b) => (a.savedAt < b.savedAt ? 1 : -1));
+    return json({ ok: true, items });
+  } catch (e) {
+    return json({ ok: false, error: String(e) }, 500);
+  }
+}
+
+async function handleGet(url, env) {
+  try {
+    const key = url.searchParams.get("key");
+    if (!key) return json({ ok: false, error: "key gerekli" }, 400);
+    const value = await env.ETUT_KV.get(key);
+    if (value === null) return json({ ok: false, error: "bulunamadı" }, 404);
+    return new Response(value, { headers: { "Content-Type": "application/json; charset=utf-8" } });
+  } catch (e) {
+    return json({ ok: false, error: String(e) }, 500);
+  }
+}
+
+async function handleDelete(request, env) {
+  try {
+    const body = await request.json();
+    if (!body.key) return json({ ok: false, error: "key gerekli" }, 400);
+    await env.ETUT_KV.delete(body.key);
+    return json({ ok: true });
+  } catch (e) {
+    return json({ ok: false, error: String(e) }, 500);
+  }
+}
+
+async function handleBackup(url, env) {
+  try {
+    const date = url.searchParams.get("date");
+    if (!date) return json({ ok: false, error: "date gerekli" }, 400);
+    const result = await env.ETUT_KV.list({ prefix: `etut:${date}:` });
+    const records = [];
+    for (const k of result.keys) {
+      const value = await env.ETUT_KV.get(k.name);
+      if (value) records.push({ key: k.name, data: JSON.parse(value) });
+    }
+    const body = JSON.stringify({ date, count: records.length, records }, null, 2);
+    return new Response(body, {
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        "Content-Disposition": `attachment; filename="yedek-${date}.json"`,
+      },
+    });
+  } catch (e) {
+    return json({ ok: false, error: String(e) }, 500);
+  }
+}
+
+async function handleFiyatSave(request, env) {
+  try {
+    const body = await request.json(); // { catalog: [...], opCatalog: [...] }
+    const now = new Date();
+    const dateStr = todayIso(now);
+    const key = `fiyat:${dateStr}:${now.getTime()}`;
+    const metadata = {
+      savedAt: now.toISOString(),
+      urunSayisi: (body.catalog || []).length,
+      operasyonSayisi: (body.opCatalog || []).length,
+    };
+    await env.ETUT_KV.put(key, JSON.stringify(body), { metadata });
+    return json({ ok: true, key });
+  } catch (e) {
+    return json({ ok: false, error: String(e) }, 500);
+  }
+}
+
+async function handleFiyatList(env) {
+  try {
+    const result = await env.ETUT_KV.list({ prefix: "fiyat:" });
+    const items = result.keys.map((k) => ({
+      key: k.name,
+      date: k.name.split(":")[1],
+      savedAt: (k.metadata && k.metadata.savedAt) || "",
+      urunSayisi: (k.metadata && k.metadata.urunSayisi) || 0,
+      operasyonSayisi: (k.metadata && k.metadata.operasyonSayisi) || 0,
+    }));
+    items.sort((a, b) => (a.savedAt < b.savedAt ? 1 : -1));
+    return json({ ok: true, items });
+  } catch (e) {
+    return json({ ok: false, error: String(e) }, 500);
+  }
+}
+
+async function handleFiyatGet(url, env) {
+  try {
+    const key = url.searchParams.get("key");
+    if (!key) return json({ ok: false, error: "key gerekli" }, 400);
+    const value = await env.ETUT_KV.get(key);
+    if (value === null) return json({ ok: false, error: "bulunamadı" }, 404);
+    return new Response(value, { headers: { "Content-Type": "application/json; charset=utf-8" } });
+  } catch (e) {
+    return json({ ok: false, error: String(e) }, 500);
+  }
+}
+
+var KATALOG_KEY = "katalog:tumu";
+
+async function handleKatalogGet(env) {
+  try {
+    const value = await env.ETUT_KV.get(KATALOG_KEY);
+    if (value === null) return json({ ok: true, catalog: [], opCatalog: [], empty: true });
+    const parsed = JSON.parse(value);
+    return json({ ok: true, catalog: parsed.catalog || [], opCatalog: parsed.opCatalog || [], updatedAt: parsed.updatedAt || "" });
+  } catch (e) {
+    return json({ ok: false, error: String(e) }, 500);
+  }
+}
+
+async function handleKatalogSave(request, env) {
+  try {
+    const body = await request.json(); // { catalog: [...], opCatalog: [...] }
+    const payload = {
+      catalog: body.catalog || [],
+      opCatalog: body.opCatalog || [],
+      updatedAt: new Date().toISOString(),
+    };
+    await env.ETUT_KV.put(KATALOG_KEY, JSON.stringify(payload));
+    return json({ ok: true });
+  } catch (e) {
+    return json({ ok: false, error: String(e) }, 500);
+  }
+}
+
+async function handleBot(request, env) {
+  try {
+    const body = await request.json();
+    const question = (body.question || "").slice(0, 1000);
+    if (!question.trim()) return json({ ok: false, error: "Soru boş olamaz" }, 400);
+
+    // Gather context: current pool, recent etüt list, price-history dates.
+    let catalog = [], opCatalog = [];
+    try {
+      const kRaw = await env.ETUT_KV.get(KATALOG_KEY);
+      if (kRaw) {
+        const k = JSON.parse(kRaw);
+        catalog = k.catalog || [];
+        opCatalog = k.opCatalog || [];
+      }
+    } catch (e) {}
+
+    let etutSummaries = [];
+    try {
+      const etutList = await env.ETUT_KV.list({ prefix: "etut:" });
+      etutSummaries = etutList.keys.slice(0, 30).map((k) => ({
+        tarih: k.name.split(":")[1],
+        etutAdi: (k.metadata && k.metadata.etutAdi) || "",
+        etutKodu: (k.metadata && k.metadata.etutKodu) || "",
+      }));
+    } catch (e) {}
+
+    let fiyatDates = [];
+    try {
+      const fiyatList = await env.ETUT_KV.list({ prefix: "fiyat:" });
+      fiyatDates = fiyatList.keys.map((k) => k.name.split(":")[1]);
+    } catch (e) {}
+
+    const contextText = [
+      "ÜRÜN HAVUZU (ad, birim fiyat, para birimi, ölçü birimi):",
+      catalog.slice(0, 150).map((p) => `- ${p.name}: ${p.price} ${p.currency}/${p.unit}`).join("\n") || "(boş)",
+      "",
+      "OPERASYON HAVUZU (ad, saatlik ücret, para birimi):",
+      opCatalog.slice(0, 100).map((o) => `- ${o.name}: ${o.hourlyRate} ${o.currency}/saat`).join("\n") || "(boş)",
+      "",
+      "KAYITLI ETÜTLER (tarih, ad, kod) — en yeni 30 tanesi:",
+      etutSummaries.map((e) => `- ${e.tarih}: ${e.etutAdi || "(isimsiz)"} ${e.etutKodu ? "(" + e.etutKodu + ")" : ""}`).join("\n") || "(boş)",
+      "",
+      "FİYAT ANLIK GÖRÜNTÜSÜ KAYDEDİLEN TARİHLER: " + (fiyatDates.join(", ") || "(boş)"),
+    ].join("\n");
+
+    const systemPrompt =
+      "Sen bir döküm/imalat maliyet hesaplama sitesinin verilerine erişimi olan bir asistansın. " +
+      "Sadece aşağıda verilen site verilerine dayanarak Türkçe cevap ver. " +
+      "Veride olmayan bir şey sorulursa, bilmediğini söyle, uydurma. Kısa ve net cevap ver.\n\n" +
+      contextText;
+
+    if (!env.AI || typeof env.AI.run !== "function") {
+      return json({ ok: false, error: "Workers AI bağlı değil (env.AI tanımsız). Cloudflare panelinde bu Worker'ın Settings > Bindings kısmından Workers AI'ın eklendiğini kontrol et." }, 500);
+    }
+
+    let aiResp;
+    try {
+      aiResp = await env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: question },
+        ],
+      });
+    } catch (aiErr) {
+      return json({ ok: false, error: "Workers AI çağrısı başarısız: " + String(aiErr && aiErr.message ? aiErr.message : aiErr) }, 502);
+    }
+
+    return json({ ok: true, answer: (aiResp && aiResp.response) || "Cevap üretilemedi." });
+  } catch (e) {
+    return json({ ok: false, error: String(e) }, 500);
+  }
+}
+
+function json(obj, status) {
+  return new Response(JSON.stringify(obj), {
+    status: status || 200,
+    headers: { "Content-Type": "application/json; charset=utf-8" },
+  });
+}
+
+async function handleKur() {
+  try {
+    const resp = await fetch("https://www.tcmb.gov.tr/kurlar/today.xml", {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+        "Accept": "application/xml,text/xml,*/*",
+      },
+    });
+    if (!resp.ok) throw new Error("TCMB'den veri alınamadı (HTTP " + resp.status + ")");
+    const xml = await resp.text();
+    if (!xml || xml.indexOf("Currency") === -1) {
+      throw new Error("TCMB'den beklenmeyen bir yanıt geldi (ilk 120 karakter: " + xml.slice(0,120) + ")");
+    }
+
+    const tarihMatch = xml.match(/Tarih="([^"]+)"/);
+    const tarih = tarihMatch ? tarihMatch[1] : "";
+
+    function rateFor(code) {
+      const re = new RegExp('CurrencyCode="' + code + '"[\\s\\S]*?<ForexSelling>\\s*([\\d.,]*)\\s*</ForexSelling>');
+      const m = xml.match(re);
+      if (!m || !m[1]) return null;
+      return parseFloat(m[1].replace(",", "."));
+    }
+
+    const usd = rateFor("USD");
+    const eur = rateFor("EUR");
+    if (usd == null || eur == null || isNaN(usd) || isNaN(eur)) {
+      throw new Error("Kur değerleri XML içinde bulunamadı");
+    }
+
+    return json({ ok: true, usd, eur, parite: eur / usd, tarih });
+  } catch (e) {
+    return json({ ok: false, error: String(e) }, 502);
+  }
+}

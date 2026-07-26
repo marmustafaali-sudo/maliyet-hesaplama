@@ -189,6 +189,13 @@
   }
   .bot-input-row button:hover{ background:#ffb84d; }
   @media print{ .bot-fab, .bot-panel{ display:none !important; } }
+
+  .cat-mascot{
+    position:fixed; left:16px; bottom:16px; z-index:40; width:66px; height:56px;
+    filter:drop-shadow(0 4px 10px rgba(0,0,0,0.4)); pointer-events:none;
+  }
+  @media print{ .cat-mascot{ display:none !important; } }
+  @media (max-width: 640px){ .cat-mascot{ display:none; } }
   @media (max-width: 860px){
     .action-dock{ position:static; width:auto; margin:0 0 20px; flex-direction:row; flex-wrap:wrap; }
   }
@@ -320,6 +327,25 @@
 </div>
 
 <button class="bot-fab" id="botFab" title="Site verileri hakkında soru sor">💬</button>
+
+<div class="cat-mascot" id="catMascot">
+  <svg viewBox="0 0 120 100" width="66" height="56">
+    <polygon points="18,32 33,4 46,34" fill="#0f2338" stroke="#f2a63b" stroke-width="2.5"/>
+    <polygon points="102,32 87,4 74,34" fill="#0f2338" stroke="#f2a63b" stroke-width="2.5"/>
+    <ellipse cx="60" cy="56" rx="46" ry="38" fill="#0f2338" stroke="#f2a63b" stroke-width="2.5"/>
+    <circle cx="42" cy="52" r="12" fill="#eef4fa"/>
+    <circle cx="78" cy="52" r="12" fill="#eef4fa"/>
+    <circle id="catPupilL" cx="42" cy="52" r="5.5" fill="#0a1826"/>
+    <circle id="catPupilR" cx="78" cy="52" r="5.5" fill="#0a1826"/>
+    <polygon points="54,66 66,66 60,74" fill="#f2a63b"/>
+    <path d="M60,74 Q54,80 48,77" stroke="#f2a63b" stroke-width="2" fill="none" stroke-linecap="round"/>
+    <path d="M60,74 Q66,80 72,77" stroke="#f2a63b" stroke-width="2" fill="none" stroke-linecap="round"/>
+    <line x1="6" y1="58" x2="34" y2="55" stroke="#f2a63b" stroke-width="1.5"/>
+    <line x1="6" y1="67" x2="34" y2="64" stroke="#f2a63b" stroke-width="1.5"/>
+    <line x1="114" y1="58" x2="86" y2="55" stroke="#f2a63b" stroke-width="1.5"/>
+    <line x1="114" y1="67" x2="86" y2="64" stroke="#f2a63b" stroke-width="1.5"/>
+  </svg>
+</div>
 <div class="bot-panel" id="botPanel">
   <div class="bot-head">
     <span>🤖 Veri Asistanı</span>
@@ -1312,7 +1338,12 @@
         method:"POST", headers:{"Content-Type":"application/json"},
         body: JSON.stringify({question:q})
       });
-      var data = await resp.json();
+      var raw = await resp.text();
+      var data;
+      try{ data = JSON.parse(raw); }
+      catch(parseErr){
+        throw new Error("Sunucudan geçersiz yanıt (HTTP " + resp.status + "): " + (raw ? raw.slice(0,200) : "(boş yanıt)"));
+      }
       pending.remove();
       if(!data.ok) throw new Error(data.error || "Cevap alınamadı");
       addBotMsg(data.answer, "bot");
@@ -1320,6 +1351,29 @@
       pending.remove();
       addBotMsg("Hata: " + e.message, "bot");
     }
+  }
+
+  // ---------- Cat mascot: eyes follow the mouse ----------
+  function initCatMascot(){
+    var cat = document.getElementById("catMascot");
+    var pupilL = document.getElementById("catPupilL");
+    var pupilR = document.getElementById("catPupilR");
+    if(!cat || !pupilL || !pupilR) return;
+    var maxOffset = 3.2;
+    document.addEventListener("mousemove", function(e){
+      var rect = cat.getBoundingClientRect();
+      var cx = rect.left + rect.width/2;
+      var cy = rect.top + rect.height/2;
+      var dx = e.clientX - cx;
+      var dy = e.clientY - cy;
+      var dist = Math.sqrt(dx*dx + dy*dy) || 1;
+      var ox = (dx/dist) * maxOffset;
+      var oy = (dy/dist) * maxOffset;
+      pupilL.setAttribute("cx", 42 + ox);
+      pupilL.setAttribute("cy", 52 + oy);
+      pupilR.setAttribute("cx", 78 + ox);
+      pupilR.setAttribute("cy", 52 + oy);
+    });
   }
 
   // ---------- Reset page (start a fresh etüt without touching the pools) ----------
@@ -1769,6 +1823,8 @@
     document.getElementById("botInput").addEventListener("keydown", function(e){
       if(e.key === "Enter") sendBotQuestion();
     });
+
+    initCatMascot();
   }
 
   function safeInit(){
