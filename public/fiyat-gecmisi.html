@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Fiyat Geçmişi</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
   @view-transition{ navigation: auto; }
@@ -77,7 +78,10 @@
       <tbody id="poolCatalogBody"></tbody>
     </table>
     <button class="pool-add-btn" id="poolAddProduct">＋ Ürün ekle</button>
+    <button class="pool-add-btn" id="poolImportBtn">⬆ Excel'den içe aktar</button>
+    <input type="file" id="poolImportFile" accept=".xlsx,.xls" style="display:none">
     <button class="pool-add-btn" id="poolSaveBtn">☁️ Havuzu kaydet</button>
+    <p class="subtitle" style="margin-top:8px;">Excel'de "ÜRÜN", "BİRİM", "BİRİM FİYAT", "DÖVİZ CİNSİ" başlıklı sütunlar aranır — sütun sırası fark etmez. İçe aktarma mevcut listenin üzerine yazar (henüz "Havuzu kaydet"e basmadan önce gözden geçirebilirsin).</p>
   </div>
 
   <div class="pool-panel">
@@ -87,7 +91,10 @@
       <tbody id="poolOpBody"></tbody>
     </table>
     <button class="pool-add-btn" id="poolAddOp">＋ Operasyon ekle</button>
+    <button class="pool-add-btn" id="poolImportOpBtn">⬆ Excel'den içe aktar</button>
+    <input type="file" id="poolImportOpFile" accept=".xlsx,.xls" style="display:none">
     <button class="pool-add-btn" id="poolSaveBtn2">☁️ Havuzu kaydet</button>
+    <p class="subtitle" style="margin-top:8px;">Excel'de "OPERASYON", "SAATLİK ÜCRET", "DÖVİZ CİNSİ" başlıklı sütunlar aranır.</p>
   </div>
 
   <div class="layout">
@@ -295,6 +302,114 @@
   });
   document.getElementById("poolSaveBtn").addEventListener("click", savePoolToCloud);
   document.getElementById("poolSaveBtn2").addEventListener("click", savePoolToCloud);
+
+  // ---------- Excel import (same column-matching rules as the main tool) ----------
+  function normHeader(s){ return String(s==null?"":s).trim().toLocaleLowerCase("tr-TR"); }
+  function normalizeUnit(v){
+    var s = String(v||"").trim().toLocaleUpperCase("tr-TR");
+    if(s==="KG") return "kg";
+    if(s==="TON") return "ton";
+    if(s==="DM3"||s==="DM\u00b3") return "dm3";
+    if(s==="ADET"||s==="AD") return "adet";
+    return "adet";
+  }
+  function normalizeCurrency(v){
+    var s = String(v||"").trim().toLocaleUpperCase("tr-TR");
+    if(s==="USD"||s==="$") return "USD";
+    if(s==="EUR"||s==="\u20ac") return "EUR";
+    return "TL";
+  }
+  function findHeaderRow(rows, keyword){
+    for(var i=0;i<rows.length;i++){
+      for(var j=0;j<rows[i].length;j++){
+        if(normHeader(rows[i][j]).indexOf(keyword) !== -1) return i;
+      }
+    }
+    return -1;
+  }
+  function parseProductRows(rows){
+    var headerIdx = findHeaderRow(rows, "\u00fcr\u00fcn");
+    if(headerIdx === -1) return [];
+    var header = rows[headerIdx].map(normHeader);
+    var nameCol = header.findIndex(function(h){ return h.indexOf("\u00fcr\u00fcn")!==-1; });
+    var unitCol = header.findIndex(function(h){ return h === "birim"; });
+    var priceCol = header.findIndex(function(h){ return h.indexOf("fiyat")!==-1; });
+    var currCol = header.findIndex(function(h){ return h.indexOf("d\u00f6viz")!==-1 || h.indexOf("para")!==-1; });
+    var out = [];
+    for(var r=headerIdx+1; r<rows.length; r++){
+      var row = rows[r] || [];
+      var name = nameCol!==-1 ? row[nameCol] : "";
+      if(!name || !String(name).trim()) continue;
+      out.push({
+        id:newId(),
+        name:String(name).trim(),
+        price: priceCol!==-1 ? (parseFloat(row[priceCol])||0) : 0,
+        currency: normalizeCurrency(currCol!==-1 ? row[currCol] : ""),
+        unit: normalizeUnit(unitCol!==-1 ? row[unitCol] : "")
+      });
+    }
+    return out;
+  }
+  function parseOperationRows(rows){
+    var headerIdx = findHeaderRow(rows, "operasyon");
+    if(headerIdx === -1) return [];
+    var header = rows[headerIdx].map(normHeader);
+    var nameCol = header.findIndex(function(h){ return h.indexOf("operasyon")!==-1; });
+    var rateCol = header.findIndex(function(h){ return h.indexOf("\u00fccret")!==-1 || h.indexOf("fiyat")!==-1; });
+    var currCol = header.findIndex(function(h){ return h.indexOf("d\u00f6viz")!==-1 || h.indexOf("para")!==-1; });
+    var out = [];
+    for(var r=headerIdx+1; r<rows.length; r++){
+      var row = rows[r] || [];
+      var name = nameCol!==-1 ? row[nameCol] : "";
+      if(!name || !String(name).trim()) continue;
+      out.push({
+        id:newId(),
+        name:String(name).trim(),
+        hourlyRate: rateCol!==-1 ? (parseFloat(row[rateCol])||0) : 0,
+        currency: normalizeCurrency(currCol!==-1 ? row[currCol] : "")
+      });
+    }
+    return out;
+  }
+  function handleImportFile(file, type){
+    if(!file) return;
+    var reader = new FileReader();
+    reader.onload = function(evt){
+      try{
+        var data = new Uint8Array(evt.target.result);
+        var wb = XLSX.read(data, {type:"array"});
+        var sheet = wb.Sheets[wb.SheetNames[0]];
+        var rows = XLSX.utils.sheet_to_json(sheet, {header:1, defval:""});
+        var parsed = type === "product" ? parseProductRows(rows) : parseOperationRows(rows);
+        if(parsed.length === 0){
+          alert("Dosyada uygun satır bulunamadı. Başlık satırında \"" + (type==="product"?"ÜRÜN":"OPERASYON") + "\" kelimesi geçen bir sütun olmalı.");
+          return;
+        }
+        var label = type === "product" ? "ürün" : "operasyon";
+        if(!confirm(parsed.length + " " + label + " bulundu. Mevcut listenin üzerine yazılsın mı? (Henüz buluta kaydedilmeyecek, önce gözden geçirebilirsin.)")) return;
+        if(type === "product"){ poolCatalog = parsed; renderPoolCatalog(); }
+        else { poolOpCatalog = parsed; renderPoolOpCatalog(); }
+      }catch(err){
+        alert("Dosya okunamadı: " + err.message);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  document.getElementById("poolImportBtn").addEventListener("click", function(){
+    document.getElementById("poolImportFile").click();
+  });
+  document.getElementById("poolImportFile").addEventListener("change", function(e){
+    handleImportFile(e.target.files[0], "product");
+    e.target.value = "";
+  });
+  document.getElementById("poolImportOpBtn").addEventListener("click", function(){
+    document.getElementById("poolImportOpFile").click();
+  });
+  document.getElementById("poolImportOpFile").addEventListener("change", function(e){
+    handleImportFile(e.target.files[0], "operation");
+    e.target.value = "";
+  });
 
   loadPool();
   loadDates();
