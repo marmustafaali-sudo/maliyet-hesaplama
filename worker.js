@@ -1,7 +1,7 @@
 export default {
   async fetch(request, env) {
     const VALID_USERS = {
-      aliuser: { pass: "Ali1999", role: "admin" },
+      userali: { pass: "ali199978", role: "admin" },
       kardokmak: { pass: "kardokmak78", role: "kisitli" },
     };
 
@@ -35,9 +35,9 @@ export default {
 
     const url = new URL(request.url);
 
-    // Delete-capable routes require the "admin" role (aliuser). The
+    // Delete-capable routes require the "admin" role (userali). The
     // restricted user (kardokmak) can view/save everything but not delete.
-    const DELETE_ROUTES = ["/api/etut/delete", "/api/fiyat/delete"];
+    const DELETE_ROUTES = ["/api/etut/delete"];
     if (DELETE_ROUTES.includes(url.pathname) && authInfo.role !== "admin") {
       return json({ ok: false, error: "Bu işlem için yetkin yok. Silme işlemleri sadece tam yetkili hesapla yapılabilir." }, 403);
     }
@@ -46,7 +46,7 @@ export default {
     // geçmişi verileri). Separate credential, checked via a token, independent
     // of the site-wide Basic-Auth above. ----
     const FIYAT_USER = "userali";
-    const FIYAT_PASS = "Ali1999";
+    const FIYAT_PASS = "ali199978";
 
     if (url.pathname === "/api/fiyat-login" && request.method === "POST") {
       return handleFiyatLogin(request, env, FIYAT_USER, FIYAT_PASS);
