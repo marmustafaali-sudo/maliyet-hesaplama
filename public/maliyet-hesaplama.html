@@ -1621,11 +1621,17 @@
         btn.addEventListener("click", async function(e){
           e.stopPropagation();
           if(!confirm("Bu etüdü arşivden silmek istediğine emin misin?")) return;
-          await fetch("/api/etut/delete", {
-            method:"POST", headers:{"Content-Type":"application/json"},
-            body: JSON.stringify({key: btn.dataset.key})
-          });
-          loadArchiveList();
+          try{
+            var resp = await fetch("/api/etut/delete", {
+              method:"POST", headers:{"Content-Type":"application/json"},
+              body: JSON.stringify({key: btn.dataset.key})
+            });
+            var data = await resp.json();
+            if(!data.ok){ alert(data.error || "Silinemedi."); return; }
+            loadArchiveList();
+          }catch(err){
+            alert("Silinemedi: " + err.message);
+          }
         });
       });
     }catch(e){

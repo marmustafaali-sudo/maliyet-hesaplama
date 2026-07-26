@@ -37,6 +37,12 @@
   }
   .date-item:hover, .date-item.active{background:var(--slate-100);color:var(--amber);}
   .date-item .di-count{display:block;font-size:11px;color:var(--slate-400);}
+  .date-item-row{display:flex;align-items:stretch;gap:2px;margin-bottom:4px;}
+  .date-item-row .date-item{margin-bottom:0;flex:1;}
+  .date-del-btn{
+    background:none;border:none;color:var(--slate-400);cursor:pointer;font-size:13px;padding:0 8px;border-radius:6px;
+  }
+  .date-del-btn:hover{color:#f87171;background:var(--slate-100);}
   .detail-col{flex:1 1 420px;border:1px solid var(--slate-200);border-radius:10px;background:var(--slate-50);padding:16px;min-height:200px;}
   .detail-col h2{font-family:'Space Grotesk',sans-serif;font-size:13px;color:var(--slate-700);margin:0 0 12px;}
   table{width:100%;border-collapse:collapse;font-size:12.5px;}
@@ -156,16 +162,39 @@
           var dt = new Date(it.savedAt);
           timeStr = " · " + dt.toLocaleTimeString("tr-TR",{hour:"2-digit",minute:"2-digit"});
         }
-        return '<button class="date-item" data-key="'+escAttr(it.key)+'" data-date="'+d+'">'+
-          dateLabel(d) + timeStr +
-          '<span class="di-count">'+it.urunSayisi+' ürün · '+it.operasyonSayisi+' operasyon</span>'+
-        '</button>';
+        return '<div class="date-item-row">'+
+          '<button class="date-item" data-key="'+escAttr(it.key)+'" data-date="'+d+'">'+
+            dateLabel(d) + timeStr +
+            '<span class="di-count">'+it.urunSayisi+' ürün · '+it.operasyonSayisi+' operasyon</span>'+
+          '</button>'+
+          '<button class="date-del-btn" data-key="'+escAttr(it.key)+'" data-date="'+d+'" title="Bu kaydı sil">🗑</button>'+
+        '</div>';
       }).join("");
       Array.prototype.forEach.call(box.querySelectorAll(".date-item"), function(btn){
         btn.addEventListener("click", function(){
           Array.prototype.forEach.call(box.querySelectorAll(".date-item"), function(b){ b.classList.remove("active"); });
           btn.classList.add("active");
           loadDetail(btn.dataset.key, btn.dataset.date);
+        });
+      });
+      Array.prototype.forEach.call(box.querySelectorAll(".date-del-btn"), function(btn){
+        btn.addEventListener("click", async function(){
+          var d = btn.dataset.date;
+          if(!confirm(dateLabel(d) + " tarihli fiyat kaydını silmek istediğine emin misin?")) return;
+          if(!confirm("Bu işlem geri alınamaz. " + dateLabel(d) + " tarihli kaydı kalıcı olarak silmek istediğinden GERÇEKTEN emin misin?")) return;
+          try{
+            var resp = await fetch("/api/fiyat/delete", {
+              method:"POST", headers:{"Content-Type":"application/json"},
+              body: JSON.stringify({key: btn.dataset.key})
+            });
+            var data = await resp.json();
+            if(!data.ok){ alert(data.error || "Silinemedi."); return; }
+            loadDates();
+            document.getElementById("detailTitle").textContent = "Bir tarih seç";
+            document.getElementById("detailBody").innerHTML = '<p class="empty-hint">Soldan bir tarih seçtiğinde o günün ürün fiyat listesi burada görünecek.</p>';
+          }catch(e){
+            alert("Silinemedi: " + e.message);
+          }
         });
       });
     }catch(e){
