@@ -224,7 +224,7 @@ async function handleBot(request, env) {
     const question = (body.question || "").slice(0, 1000);
     if (!question.trim()) return json({ ok: false, error: "Soru boş olamaz" }, 400);
 
-    // Gather context: current pool, recent etüt list, price-history dates.
+    // ---- Current product/operation pool ----
     let catalog = [], opCatalog = [];
     try {
       const kRaw = await env.ETUT_KV.get(KATALOG_KEY);
@@ -235,39 +235,115 @@ async function handleBot(request, env) {
       }
     } catch (e) {}
 
-    let etutSummaries = [];
+    // ---- Full etüt records (not just names) so the bot can actually
+    // compare/comment on costs, weights, materials used, etc. ----
+    function toEurLocal(price, currency, usd, eur) {
+      const p = Number(price) || 0;
+      if (currency === "EUR") return p;
+      if (currency === "USD") return usd && eur ? (p * usd) / eur : 0;
+      return eur ? p / eur : 0;
+    }
+    function convertQtyLocal(qty, fromUnit, toUnit) {
+      const WEIGHT_KG = { kg: 1, ton: 1000 };
+      const q = Number(qty) || 0;
+      if (fromUnit === toUnit) return q;
+      if (WEIGHT_KG[fromUnit] && WEIGHT_KG[toUnit]) return (q * WEIGHT_KG[fromUnit]) / WEIGHT_KG[toUnit];
+      return q;
+    }
+    function summarizeEtut(snap) {
+      const usd = snap.usdTry || 0, eur = snap.eurTry || 0;
+      const items = snap.items || [];
+      const laborItems = snap.laborItems || [];
+      const materialTotal = items.reduce((s, it) => {
+        const catalogUnit = it.catalogUnit || it.unit;
+        const qty = convertQtyLocal(it.qty, it.unit, catalogUnit);
+        return s + toEurLocal(it.price, it.currency, usd, eur) * qty;
+      }, 0);
+      const laborTotal = laborItems.reduce((s, it) => {
+        return s + toEurLocal(it.hourlyRate, it.currency, usd, eur) * (Number(it.hours) || 0);
+      }, 0);
+      const grandTotal = materialTotal + laborTotal;
+      const weight = parseFloat(snap.partWeight) || 0;
+      const mainMaterials = items.slice(0, 8).map((it) => it.name).filter(Boolean).join(", ");
+      return { materialTotal, laborTotal, grandTotal, weight, mainMaterials, notlar: snap.notlar || "" };
+    }
+
+    let etutLines = [];
     try {
       const etutList = await env.ETUT_KV.list({ prefix: "etut:" });
-      etutSummaries = etutList.keys.slice(0, 30).map((k) => ({
-        tarih: k.name.split(":")[1],
-        etutAdi: (k.metadata && k.metadata.etutAdi) || "",
-        etutKodu: (k.metadata && k.metadata.etutKodu) || "",
-      }));
+      const keys = etutList.keys.slice(0, 25); // cap to keep prompt + subrequests reasonable
+      const records = await Promise.all(
+        keys.map(async (k) => {
+          try {
+            const raw = await env.ETUT_KV.get(k.name);
+            if (!raw) return null;
+            const snap = JSON.parse(raw);
+            const s = summarizeEtut(snap);
+            const tarih = k.name.split(":")[1];
+            const perKg = s.weight > 0 ? s.grandTotal / s.weight : null;
+            return `- ${tarih} | ${snap.etutAdi || "(isimsiz)"}${snap.etutKodu ? " (" + snap.etutKodu + ")" : ""} | ` +
+              `Malzeme: €${s.materialTotal.toFixed(2)} | İşçilik: €${s.laborTotal.toFixed(2)} | ` +
+              `Genel toplam: €${s.grandTotal.toFixed(2)}` +
+              (s.weight ? ` | Ağırlık: ${s.weight}kg | €/kg: ${perKg.toFixed(2)}` : "") +
+              (s.mainMaterials ? ` | Malzemeler: ${s.mainMaterials}` : "") +
+              (s.notlar ? ` | Not: ${s.notlar}` : "");
+          } catch (e) {
+            return null;
+          }
+        })
+      );
+      etutLines = records.filter(Boolean);
     } catch (e) {}
 
-    let fiyatDates = [];
+    // ---- Full price-history snapshots (not just dates) so the bot can
+    // compare product prices across time and comment on trends. ----
+    let fiyatBlocks = [];
     try {
       const fiyatList = await env.ETUT_KV.list({ prefix: "fiyat:" });
-      fiyatDates = fiyatList.keys.map((k) => k.name.split(":")[1]);
+      const sortedKeys = fiyatList.keys
+        .slice()
+        .sort((a, b) => (a.name < b.name ? 1 : -1)) // newest first (date embedded in key)
+        .slice(0, 8); // cap number of snapshots to keep prompt manageable
+      const blocks = await Promise.all(
+        sortedKeys.map(async (k) => {
+          try {
+            const raw = await env.ETUT_KV.get(k.name);
+            if (!raw) return null;
+            const snap = JSON.parse(raw);
+            const dateStr = k.name.split(":")[1];
+            const lines = (snap.catalog || [])
+              .slice(0, 60)
+              .map((p) => `  ${p.name}: ${p.price} ${p.currency}/${p.unit}`)
+              .join("\n");
+            return `${dateStr}:\n${lines || "  (boş)"}`;
+          } catch (e) {
+            return null;
+          }
+        })
+      );
+      fiyatBlocks = blocks.filter(Boolean);
     } catch (e) {}
 
     const contextText = [
-      "ÜRÜN HAVUZU (ad, birim fiyat, para birimi, ölçü birimi):",
+      "ÜRÜN HAVUZU (şu anki güncel fiyatlar — ad, birim fiyat, para birimi, ölçü birimi):",
       catalog.slice(0, 150).map((p) => `- ${p.name}: ${p.price} ${p.currency}/${p.unit}`).join("\n") || "(boş)",
       "",
       "OPERASYON HAVUZU (ad, saatlik ücret, para birimi):",
       opCatalog.slice(0, 100).map((o) => `- ${o.name}: ${o.hourlyRate} ${o.currency}/saat`).join("\n") || "(boş)",
       "",
-      "KAYITLI ETÜTLER (tarih, ad, kod) — en yeni 30 tanesi:",
-      etutSummaries.map((e) => `- ${e.tarih}: ${e.etutAdi || "(isimsiz)"} ${e.etutKodu ? "(" + e.etutKodu + ")" : ""}`).join("\n") || "(boş)",
+      "KAYITLI ETÜTLER (en yeni 25 tanesi, her biri maliyet detaylarıyla):",
+      etutLines.join("\n") || "(boş)",
       "",
-      "FİYAT ANLIK GÖRÜNTÜSÜ KAYDEDİLEN TARİHLER: " + (fiyatDates.join(", ") || "(boş)"),
+      "FİYAT GEÇMİŞİ ANLIK GÖRÜNTÜLERİ (en yeni 8 tanesi, tarih ve o tarihteki ürün fiyatları — bunları karşılaştırarak fiyat artış/azalış trendini yorumlayabilirsin):",
+      fiyatBlocks.join("\n\n") || "(boş)",
     ].join("\n");
 
     const systemPrompt =
       "Sen bir döküm/imalat maliyet hesaplama sitesinin verilerine erişimi olan bir asistansın. " +
-      "Sadece aşağıda verilen site verilerine dayanarak Türkçe cevap ver. " +
-      "Veride olmayan bir şey sorulursa, bilmediğini söyle, uydurma. Kısa ve net cevap ver.\n\n" +
+      "Sadece aşağıda verilen site verilerine dayanarak Türkçe cevap ver. Etütleri karşılaştırabilir, " +
+      "fiyat geçmişindeki verilere bakarak hangi ürünün fiyatının arttığını/azaldığını yorumlayabilir, " +
+      "en pahalı/en ucuz etüdü söyleyebilirsin. Veride gerçekten olmayan bir şey sorulursa bilmediğini söyle, uydurma. " +
+      "Kısa ve net cevap ver.\n\n" +
       contextText;
 
     if (!env.AI || typeof env.AI.run !== "function") {
