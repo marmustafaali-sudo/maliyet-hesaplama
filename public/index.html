@@ -64,6 +64,10 @@
   h1{font-family:'Space Grotesk',sans-serif;font-size:21px;font-weight:600;color:var(--slate-900);margin:0;letter-spacing:-.01em;}
   h2{font-family:'Space Grotesk',sans-serif;font-size:14px;font-weight:600;color:var(--slate-700);margin:0 0 8px;letter-spacing:.01em;}
   .subtitle{font-size:13px;color:var(--slate-500);margin:4px 0 0;}
+  .page-tabs{display:flex;gap:4px;margin-bottom:20px;border-bottom:1px solid var(--slate-200);}
+  .page-tab{padding:10px 16px;font-size:13px;color:var(--slate-500);text-decoration:none;border-bottom:2px solid transparent;font-family:'Space Grotesk',sans-serif;}
+  .page-tab:hover{color:var(--amber);}
+  .page-tab.active{color:var(--amber);border-bottom-color:var(--amber);font-weight:600;}
   label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--slate-500);}
   input,select,textarea{
     border:1px solid var(--slate-300); border-radius:6px; padding:6px 8px; font-size:13px;
@@ -157,6 +161,34 @@
   .ad-danger{ color:#f87171; border-color:#7f1d1d; }
   .ad-danger:hover{ color:#fca5a5; border-color:#f87171; }
   @media print{ .action-dock{ display:none !important; } }
+
+  .bot-fab{
+    position:fixed; right:16px; bottom:16px; z-index:60; width:52px; height:52px; border-radius:50%;
+    background:var(--amber); color:#1a1305; border:none; font-size:22px; cursor:pointer;
+    box-shadow:0 4px 16px rgba(0,0,0,0.4); display:flex; align-items:center; justify-content:center;
+  }
+  .bot-fab:hover{ background:#ffb84d; }
+  .bot-panel{
+    position:fixed; right:16px; bottom:78px; z-index:60; width:320px; max-height:60vh;
+    background:#0f2338; border:1px solid var(--slate-200); border-radius:12px; box-shadow:0 8px 30px rgba(0,0,0,0.45);
+    display:none; flex-direction:column; overflow:hidden;
+  }
+  .bot-panel.open{ display:flex; }
+  .bot-head{ padding:12px 14px; border-bottom:1px solid var(--slate-200); font-family:'Space Grotesk',sans-serif; font-size:13px; color:var(--slate-900); display:flex; justify-content:space-between; align-items:center; }
+  .bot-head button{ background:none; border:none; color:var(--slate-400); cursor:pointer; font-size:14px; }
+  .bot-head button:hover{ color:var(--amber); }
+  .bot-msgs{ flex:1; overflow-y:auto; padding:12px 14px; display:flex; flex-direction:column; gap:10px; font-size:12.5px; }
+  .bot-msg{ max-width:88%; padding:8px 10px; border-radius:8px; line-height:1.5; }
+  .bot-msg.user{ align-self:flex-end; background:var(--amber); color:#1a1305; }
+  .bot-msg.bot{ align-self:flex-start; background:var(--slate-100); color:var(--slate-800); white-space:pre-wrap; }
+  .bot-msg.pending{ color:var(--slate-400); font-style:italic; }
+  .bot-input-row{ display:flex; gap:6px; padding:10px; border-top:1px solid var(--slate-200); }
+  .bot-input-row input{ flex:1; }
+  .bot-input-row button{
+    background:var(--amber); color:#1a1305; border:none; border-radius:6px; padding:0 12px; cursor:pointer; font-size:13px;
+  }
+  .bot-input-row button:hover{ background:#ffb84d; }
+  @media print{ .bot-fab, .bot-panel{ display:none !important; } }
   @media (max-width: 860px){
     .action-dock{ position:static; width:auto; margin:0 0 20px; flex-direction:row; flex-wrap:wrap; }
   }
@@ -286,8 +318,27 @@
   <h3>📁 Etüt Arşivi</h3>
   <div id="archiveList" style="font-size:12px;color:#94a3b8;">Yükleniyor…</div>
 </div>
+
+<button class="bot-fab" id="botFab" title="Site verileri hakkında soru sor">💬</button>
+<div class="bot-panel" id="botPanel">
+  <div class="bot-head">
+    <span>🤖 Veri Asistanı</span>
+    <button id="botCloseBtn">✕</button>
+  </div>
+  <div class="bot-msgs" id="botMsgs">
+    <div class="bot-msg bot">Merhaba! Ürün havuzu, operasyon havuzu, etüt arşivi ve fiyat geçmişi hakkında soru sorabilirsin.</div>
+  </div>
+  <div class="bot-input-row">
+    <input type="text" id="botInput" placeholder="Örn. Kum'un fiyatı ne?">
+    <button id="botSendBtn">Gönder</button>
+  </div>
+</div>
 <div class="container">
 
+  <div class="page-tabs">
+    <a class="page-tab active" href="maliyet-hesaplama.html">Maliyet Tablosu</a>
+    <a class="page-tab" href="fiyat-gecmisi.html">Fiyat Geçmişi</a>
+  </div>
   <h1>Maliyet hesaplama tablosu</h1>
   <div id="libWarning" style="display:none;background:#2a1416;border:1px solid #7f1d1d;color:#fca5a5;padding:12px 16px;border-radius:8px;font-size:13px;margin:12px 0;"></div>
   <p class="subtitle">Ürün ve operasyon havuzundan seç, EUR karşılığı otomatik hesaplansın. (Yerel HTML sürümü — verilerin tarayıcında saklanır.)</p>
@@ -1238,6 +1289,39 @@
     }
   }
 
+  // ---------- Data assistant (Cloudflare Workers AI, grounded in site data) ----------
+  function addBotMsg(text, cls){
+    var box = document.getElementById("botMsgs");
+    var div = document.createElement("div");
+    div.className = "bot-msg " + cls;
+    div.textContent = text;
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+    return div;
+  }
+
+  async function sendBotQuestion(){
+    var input = document.getElementById("botInput");
+    var q = input.value.trim();
+    if(!q) return;
+    addBotMsg(q, "user");
+    input.value = "";
+    var pending = addBotMsg("Düşünüyor…", "bot pending");
+    try{
+      var resp = await fetch("/api/bot", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({question:q})
+      });
+      var data = await resp.json();
+      pending.remove();
+      if(!data.ok) throw new Error(data.error || "Cevap alınamadı");
+      addBotMsg(data.answer, "bot");
+    }catch(e){
+      pending.remove();
+      addBotMsg("Hata: " + e.message, "bot");
+    }
+  }
+
   // ---------- Reset page (start a fresh etüt without touching the pools) ----------
   function resetPage(){
     var ok = confirm("Bu sayfadaki malzeme/işçilik satırları, etüt adı/kodu ve parça ağırlığı sıfırlanacak.\n\nÜrün havuzu ve operasyon havuzu ETKİLENMEYECEK.\n\nDevam edilsin mi?");
@@ -1674,6 +1758,17 @@
     refreshRateWidget();
     setInterval(refreshRateWidget, 10 * 60 * 1000); // her 10 dakikada bir otomatik yenile
     loadLastFiyatSnapshotInfo();
+
+    document.getElementById("botFab").addEventListener("click", function(){
+      document.getElementById("botPanel").classList.toggle("open");
+    });
+    document.getElementById("botCloseBtn").addEventListener("click", function(){
+      document.getElementById("botPanel").classList.remove("open");
+    });
+    document.getElementById("botSendBtn").addEventListener("click", sendBotQuestion);
+    document.getElementById("botInput").addEventListener("keydown", function(e){
+      if(e.key === "Enter") sendBotQuestion();
+    });
   }
 
   function safeInit(){
