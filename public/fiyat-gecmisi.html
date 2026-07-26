@@ -83,41 +83,56 @@
   <h1>Fiyat Geçmişi &amp; Ürün Havuzu</h1>
   <p class="subtitle">Ürün ve operasyon havuzunu buradan yönet — maliyet hesaplama aracı havuzu buradan çeker. (Tablodaki "Elle gir…" ile tek seferlik manuel ürün girme seçeneği ayrıca duruyor, etkilenmiyor.)</p>
 
-  <div class="pool-panel">
-    <h2>Ürün havuzu <span id="poolSaveStatus" class="save-status"></span></h2>
-    <p class="pool-sub">Buradaki değişiklikler kaydettiğinde tüm cihazlarda/kullanıcılarda güncellenir.</p>
-    <table class="mini-table">
-      <thead><tr><th>Ürün adı</th><th style="width:110px;">Birim fiyat</th><th style="width:90px;">Para birimi</th><th style="width:90px;">Ölçü birimi</th><th style="width:28px;"></th></tr></thead>
-      <tbody id="poolCatalogBody"></tbody>
-    </table>
-    <button class="pool-add-btn" id="poolAddProduct">＋ Ürün ekle</button>
-    <button class="pool-add-btn" id="poolImportBtn">⬆ Excel'den içe aktar</button>
-    <input type="file" id="poolImportFile" accept=".xlsx,.xls" style="display:none">
-    <button class="pool-add-btn" id="poolSaveBtn">☁️ Havuzu kaydet</button>
-    <p class="subtitle" style="margin-top:8px;">Excel'de "ÜRÜN", "BİRİM", "BİRİM FİYAT", "DÖVİZ CİNSİ" başlıklı sütunlar aranır — sütun sırası fark etmez. İçe aktarma mevcut listenin üzerine yazar (henüz "Havuzu kaydet"e basmadan önce gözden geçirebilirsin).</p>
+  <div id="loginGate" class="pool-panel" style="max-width:340px;">
+    <h2>Giriş yap</h2>
+    <p class="pool-sub">Bu bölüme erişmek için ayrı bir kullanıcı adı/şifre gerekiyor.</p>
+    <label style="display:block;font-size:12px;color:var(--slate-500);margin-bottom:10px;">Kullanıcı adı
+      <input type="text" id="loginUser" style="display:block;width:100%;margin-top:4px;">
+    </label>
+    <label style="display:block;font-size:12px;color:var(--slate-500);margin-bottom:12px;">Şifre
+      <input type="password" id="loginPass" style="display:block;width:100%;margin-top:4px;">
+    </label>
+    <button class="pool-add-btn" id="loginBtn">Giriş yap</button>
+    <p id="loginError" class="error-text" style="margin-top:10px;"></p>
   </div>
 
-  <div class="pool-panel">
-    <h2>Operasyon havuzu</h2>
-    <table class="mini-table">
-      <thead><tr><th>Operasyon adı</th><th style="width:130px;">Saatlik ücret</th><th style="width:90px;">Para birimi</th><th style="width:28px;"></th></tr></thead>
-      <tbody id="poolOpBody"></tbody>
-    </table>
-    <button class="pool-add-btn" id="poolAddOp">＋ Operasyon ekle</button>
-    <button class="pool-add-btn" id="poolImportOpBtn">⬆ Excel'den içe aktar</button>
-    <input type="file" id="poolImportOpFile" accept=".xlsx,.xls" style="display:none">
-    <button class="pool-add-btn" id="poolSaveBtn2">☁️ Havuzu kaydet</button>
-    <p class="subtitle" style="margin-top:8px;">Excel'de "OPERASYON", "SAATLİK ÜCRET", "DÖVİZ CİNSİ" başlıklı sütunlar aranır.</p>
-  </div>
-
-  <div class="layout">
-    <div class="dates-col">
-      <h2>Tarihler</h2>
-      <div id="datesList"><p class="empty-hint">Yükleniyor…</p></div>
+  <div id="protectedContent" style="display:none;">
+    <div class="pool-panel">
+      <h2>Ürün havuzu <span id="poolSaveStatus" class="save-status"></span></h2>
+      <p class="pool-sub">Buradaki değişiklikler kaydettiğinde tüm cihazlarda/kullanıcılarda güncellenir.</p>
+      <table class="mini-table">
+        <thead><tr><th>Ürün adı</th><th style="width:110px;">Birim fiyat</th><th style="width:90px;">Para birimi</th><th style="width:90px;">Ölçü birimi</th><th style="width:28px;"></th></tr></thead>
+        <tbody id="poolCatalogBody"></tbody>
+      </table>
+      <button class="pool-add-btn" id="poolAddProduct">＋ Ürün ekle</button>
+      <button class="pool-add-btn" id="poolImportBtn">⬆ Excel'den içe aktar</button>
+      <input type="file" id="poolImportFile" accept=".xlsx,.xls" style="display:none">
+      <button class="pool-add-btn" id="poolSaveBtn">☁️ Havuzu kaydet</button>
+      <p class="subtitle" style="margin-top:8px;">Excel'de "ÜRÜN", "BİRİM", "BİRİM FİYAT", "DÖVİZ CİNSİ" başlıklı sütunlar aranır — sütun sırası fark etmez. İçe aktarma mevcut listenin üzerine yazar (henüz "Havuzu kaydet"e basmadan önce gözden geçirebilirsin).</p>
     </div>
-    <div class="detail-col">
-      <h2 id="detailTitle">Bir tarih seç</h2>
-      <div id="detailBody"><p class="empty-hint">Soldan bir tarih seçtiğinde o günün ürün fiyat listesi burada görünecek.</p></div>
+
+    <div class="pool-panel">
+      <h2>Operasyon havuzu</h2>
+      <table class="mini-table">
+        <thead><tr><th>Operasyon adı</th><th style="width:130px;">Saatlik ücret</th><th style="width:90px;">Para birimi</th><th style="width:28px;"></th></tr></thead>
+        <tbody id="poolOpBody"></tbody>
+      </table>
+      <button class="pool-add-btn" id="poolAddOp">＋ Operasyon ekle</button>
+      <button class="pool-add-btn" id="poolImportOpBtn">⬆ Excel'den içe aktar</button>
+      <input type="file" id="poolImportOpFile" accept=".xlsx,.xls" style="display:none">
+      <button class="pool-add-btn" id="poolSaveBtn2">☁️ Havuzu kaydet</button>
+      <p class="subtitle" style="margin-top:8px;">Excel'de "OPERASYON", "SAATLİK ÜCRET", "DÖVİZ CİNSİ" başlıklı sütunlar aranır.</p>
+    </div>
+
+    <div class="layout">
+      <div class="dates-col">
+        <h2>Tarihler</h2>
+        <div id="datesList"><p class="empty-hint">Yükleniyor…</p></div>
+      </div>
+      <div class="detail-col">
+        <h2 id="detailTitle">Bir tarih seç</h2>
+        <div id="detailBody"><p class="empty-hint">Soldan bir tarih seçtiğinde o günün ürün fiyat listesi burada görünecek.</p></div>
+      </div>
     </div>
   </div>
 </div>
@@ -184,7 +199,7 @@
           if(!confirm("Bu işlem geri alınamaz. " + dateLabel(d) + " tarihli kaydı kalıcı olarak silmek istediğinden GERÇEKTEN emin misin?")) return;
           try{
             var resp = await fetch("/api/fiyat/delete", {
-              method:"POST", headers:{"Content-Type":"application/json"},
+              method:"POST", headers:{"Content-Type":"application/json","X-Fiyat-Token":getFiyatToken()},
               body: JSON.stringify({key: btn.dataset.key})
             });
             var data = await resp.json();
@@ -208,7 +223,9 @@
     title.textContent = dateLabel(date) + " tarihli fiyat listesi";
     body.innerHTML = '<p class="empty-hint">Yükleniyor…</p>';
     try{
-      var resp = await fetch("/api/fiyat/get?key=" + encodeURIComponent(key));
+      var resp = await fetch("/api/fiyat/get?key=" + encodeURIComponent(key), {
+        headers: {"X-Fiyat-Token": getFiyatToken()}
+      });
       var snap = await resp.json();
       var catalog = snap.catalog || [];
       var opCatalog = snap.opCatalog || [];
@@ -447,8 +464,41 @@
     e.target.value = "";
   });
 
-  loadPool();
-  loadDates();
+  // ---------- Login gate (separate credential for this page) ----------
+  function getFiyatToken(){ return sessionStorage.getItem("fiyatToken") || ""; }
+
+  function showProtectedContent(){
+    document.getElementById("loginGate").style.display = "none";
+    document.getElementById("protectedContent").style.display = "block";
+    loadPool();
+    loadDates();
+  }
+
+  document.getElementById("loginBtn").addEventListener("click", async function(){
+    var user = document.getElementById("loginUser").value.trim();
+    var pass = document.getElementById("loginPass").value;
+    var errEl = document.getElementById("loginError");
+    errEl.textContent = "";
+    try{
+      var resp = await fetch("/api/fiyat-login", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({username:user, password:pass})
+      });
+      var data = await resp.json();
+      if(!data.ok){ errEl.textContent = data.error || "Giriş başarısız."; return; }
+      sessionStorage.setItem("fiyatToken", data.token);
+      showProtectedContent();
+    }catch(e){
+      errEl.textContent = "Giriş yapılamadı: " + e.message;
+    }
+  });
+  document.getElementById("loginPass").addEventListener("keydown", function(e){
+    if(e.key === "Enter") document.getElementById("loginBtn").click();
+  });
+
+  if(getFiyatToken()){
+    showProtectedContent();
+  }
 })();
 </script>
 </body>
